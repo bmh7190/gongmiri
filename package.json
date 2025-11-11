@@ -9,12 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "shpjs": "^6.2.0",
     "vue": "^3.5.24"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.2.1",
     "@types/chrome": "^0.1.27",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^24.10.0",
+    "@types/shpjs": "^3.4.7",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
     "typescript": "~5.9.3",
