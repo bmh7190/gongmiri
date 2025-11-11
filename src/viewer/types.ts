@@ -25,12 +25,23 @@ export type ZipLayerStatus = {
   missingEssential: string[];
 };
 
+export type SridCode = 4326 | 5179 | 5186 | 3857;
+
+export type SridOption = {
+  code: SridCode;
+  name: string;
+  description: string;
+  proj4: string;
+};
+
 export type ZipInspection = {
   layers: ZipLayerStatus[];
   hasValidLayer: boolean;
   hasCpg: boolean;
   hasPrj: boolean;
   detectedEncoding?: EncodingOption;
+  detectedSridCode?: SridCode;
+  prjText?: string;
 };
 
 export type FeatureCollectionGeometry = FeatureCollection<Geometry>;
