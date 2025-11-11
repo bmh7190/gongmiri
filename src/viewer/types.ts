@@ -28,7 +28,12 @@ export type ZipLayerStatus = {
 export type ZipInspection = {
   layers: ZipLayerStatus[];
   hasValidLayer: boolean;
+  hasCpg: boolean;
+  hasPrj: boolean;
+  detectedEncoding?: EncodingOption;
 };
 
 export type FeatureCollectionGeometry = FeatureCollection<Geometry>;
 export type FeatureGeometry = Feature<Geometry>;
+
+export type EncodingOption = "utf-8" | "cp949";
