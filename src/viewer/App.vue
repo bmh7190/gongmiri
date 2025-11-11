@@ -5,6 +5,7 @@ import DropZone from "./components/DropZone.vue";
 import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
 import ResultPanel from "./components/ResultPanel.vue";
 import SridSelector from "./components/SridSelector.vue";
+import AttributePreview from "./components/AttributePreview.vue";
 import {
   type FeatureCollectionGeometry,
   type FeatureGeometry,
@@ -30,6 +31,13 @@ const sourceBuffer = ref<ArrayBuffer | null>(null);
 const currentFileName = ref<string>("");
 const hasParsedOnce = ref(false);
 const currentCollection = ref<FeatureCollectionGeometry | null>(null);
+const hasFileLoaded = computed(() => Boolean(sourceBuffer.value));
+const sampleProperties = computed<Record<string, unknown> | null>(() => {
+  const feature = currentCollection.value?.features?.[0];
+  return feature?.properties ?? null;
+});
+
+let parseRunId = 0;
 
 type WorkerMessage =
   | { id: number; status: "success"; collection: FeatureCollection }
@@ -92,6 +100,20 @@ const resetDragState = () => {
 
 const handleDragState = (state: boolean) => {
   isDragging.value = state;
+};
+
+const resetViewer = () => {
+  parseRunId += 1;
+  isLoading.value = false;
+  errorMessage.value = "";
+  sourceBuffer.value = null;
+  zipInspection.value = null;
+  result.value = null;
+  srid.value = null;
+  encoding.value = "utf-8";
+  currentFileName.value = "";
+  currentCollection.value = null;
+  hasParsedOnce.value = false;
 };
 
 const onDrop = async (event: DragEvent) => {
@@ -240,8 +262,6 @@ const statusMessage = computed(() => {
   if (result.value) return `${result.value.fileName} 분석 완료`;
   return "Shapefile ZIP을 드래그하거나 선택하세요.";
 });
-
-let parseRunId = 0;
 
 const runParse = async (
   buffer: ArrayBuffer,
@@ -423,38 +443,78 @@ watch(srid, (next, prev) => {
 <template>
   <div class="popup-container">
     <header class="header">
-      <h2>공미리 — 공간데이터 미리보기</h2>
-      <p>{{ statusMessage }}</p>
+      <div class="header-meta">
+        <h2>공미리 — 공간데이터 미리보기</h2>
+        <p>{{ statusMessage }}</p>
+      </div>
+      <button
+        v-if="hasFileLoaded"
+        type="button"
+        class="reset-button reset-button--header"
+        @click="resetViewer"
+      >
+        새 ZIP 분석하기
+      </button>
     </header>
 
-    <DropZone
-      :is-dragging="isDragging"
-      :is-loading="isLoading"
-      @drop-file="onDrop"
-      @drag-state="handleDragState"
-    />
+    <div class="content-grid">
+      <div class="panel-stack panel-stack--left">
+        <DropZone
+          v-if="!hasFileLoaded"
+          :is-dragging="isDragging"
+          :is-loading="isLoading"
+          @drop-file="onDrop"
+          @drag-state="handleDragState"
+        />
 
-    <ZipInspectionPanel
-      v-if="zipInspection"
-      :inspection="zipInspection"
-      :encoding="encoding"
-      @change-encoding="encoding = $event"
-    />
+        <ZipInspectionPanel
+          v-if="zipInspection"
+          :inspection="zipInspection"
+          :feature-count="result?.featureCount ?? null"
+          :geometry-types="result?.geometryTypes ?? []"
+        />
 
-    <SridSelector
-      v-if="zipInspection"
-      :detected="zipInspection.detectedSridCode ?? null"
-      :selected="srid"
-      @update:selected="srid = $event"
-    />
+        <SridSelector
+          v-if="zipInspection"
+          :detected="zipInspection.detectedSridCode ?? null"
+          :selected="srid"
+          @update:selected="srid = $event"
+        />
+      </div>
 
-    <ResultPanel
-      v-if="result"
-      :result="result"
-    />
+      <div class="panel-stack panel-stack--right">
+        <ResultPanel
+          v-if="result"
+          :result="result"
+          :encoding="encoding"
+          :detected-encoding="zipInspection?.detectedEncoding"
+          :has-cpg="zipInspection?.hasCpg"
+          @change-encoding="encoding = $event"
+        />
 
-    <p v-else-if="errorMessage" class="error-text">
-      {{ errorMessage }}
-    </p>
+        <AttributePreview
+          v-if="sampleProperties"
+          :properties="sampleProperties"
+          :encoding="encoding"
+          :detected-encoding="zipInspection?.detectedEncoding"
+          :has-cpg="zipInspection?.hasCpg"
+          @change-encoding="encoding = $event"
+        />
+
+        <div v-else-if="errorMessage" class="alert-card">
+          <p>{{ errorMessage }}</p>
+        </div>
+
+        <div v-else class="placeholder-card">
+          <h3>ZIP 파일을 드롭해 보세요</h3>
+          <p>다운로드한 Shapefile ZIP을 놓으면 구성 검사, 인코딩·좌표계 추정, 속성 요약이 순서대로 표시됩니다.</p>
+          <ul>
+            <li>SHP/DBF/SHX 조합이 모두 있는지 즉시 확인</li>
+            <li>CPG/PRJ 유무와 추정 결과를 한눈에 체크</li>
+            <li>추후 지도·속성 패널과 연동될 예정이에요</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
