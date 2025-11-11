@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "but-unzip": "^0.1.7",
     "proj4": "^2.19.10",
     "shpjs": "^6.2.0",
     "vue": "^3.5.24"
