@@ -1,38 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { FeatureCollection, Feature, Geometry } from "geojson";
 import shp from "shpjs";
 import { iter } from "but-unzip";
-
-type ColumnStat = {
-  name: string;
-  filled: number;
-  empty: number;
-  fillRate: number;
-  samples: string[];
-};
-
-type ViewerResult = {
-  fileName: string;
-  featureCount: number;
-  geometryTypes: string[];
-  columns: ColumnStat[];
-};
-
-type ZipLayerStatus = {
-  name: string;
-  hasShp: boolean;
-  hasDbf: boolean;
-  hasShx: boolean;
-  hasPrj: boolean;
-  hasCpg: boolean;
-  missingEssential: string[];
-};
-
-type ZipInspection = {
-  layers: ZipLayerStatus[];
-  hasValidLayer: boolean;
-};
+import DropZone from "./components/DropZone.vue";
+import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
+import ResultPanel from "./components/ResultPanel.vue";
+import {
+  type FeatureCollectionGeometry,
+  type FeatureGeometry,
+  type ViewerResult,
+  type ZipInspection,
+  type ColumnStat,
+  type ZipLayerStatus,
+} from "./types";
+import "./viewer.css";
 
 const isDragging = ref(false);
 const isLoading = ref(false);
@@ -40,14 +21,12 @@ const errorMessage = ref("");
 const result = ref<ViewerResult | null>(null);
 const zipInspection = ref<ZipInspection | null>(null);
 
-const prevent = (e: DragEvent) => {
-  e.preventDefault();
-  if (e.type === "dragenter") isDragging.value = true;
-  if (e.type === "dragleave") isDragging.value = false;
-};
-
 const resetDragState = () => {
   isDragging.value = false;
+};
+
+const handleDragState = (state: boolean) => {
+  isDragging.value = state;
 };
 
 const onDrop = async (event: DragEvent) => {
@@ -91,21 +70,21 @@ const onDrop = async (event: DragEvent) => {
 
 const normalizeCollection = (
   geojson: unknown,
-): FeatureCollection<Geometry> => {
+): FeatureCollectionGeometry => {
   if (
     geojson &&
     typeof geojson === "object" &&
     "type" in geojson &&
     geojson.type === "FeatureCollection"
   ) {
-    return geojson as FeatureCollection<Geometry>;
+      return geojson as FeatureCollectionGeometry;
   }
 
   if (Array.isArray(geojson)) {
-    const mergedFeatures: Feature<Geometry>[] = [];
+    const mergedFeatures: FeatureGeometry[] = [];
     for (const item of geojson) {
       if (item?.type === "FeatureCollection") {
-        mergedFeatures.push(...(item.features as Feature<Geometry>[]));
+        mergedFeatures.push(...(item.features as FeatureGeometry[]));
       }
     }
     if (mergedFeatures.length > 0) {
@@ -120,10 +99,10 @@ const normalizeCollection = (
 };
 
 const summarizeCollection = (
-  collection: FeatureCollection<Geometry>,
+  collection: FeatureCollectionGeometry,
   fileName: string,
 ): ViewerResult => {
-  const features: Feature<Geometry>[] = collection.features ?? [];
+  const features: FeatureGeometry[] = collection.features ?? [];
   const allColumns = new Set<string>();
 
   for (const feature of features) {
@@ -180,8 +159,6 @@ const summarizeCollection = (
     columns,
   };
 };
-
-const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
 const statusMessage = computed(() => {
   if (isLoading.value) return "ZIP을 해석하는 중입니다…";
@@ -271,293 +248,25 @@ const inspectZipEntries = (buffer: ArrayBuffer): ZipInspection => {
       <p>{{ statusMessage }}</p>
     </header>
 
-    <div
-      class="drop-zone"
-      @drop="onDrop"
-      @dragenter="prevent"
-      @dragover="prevent"
-      @dragleave="prevent"
-      :class="{ 'drop-zone--active': isDragging, 'drop-zone--loading': isLoading }"
-    >
-      <span v-if="isLoading">분석 중…</span>
-      <span v-else>ZIP 파일 놓기</span>
-    </div>
+    <DropZone
+      :is-dragging="isDragging"
+      :is-loading="isLoading"
+      @drop-file="onDrop"
+      @drag-state="handleDragState"
+    />
 
-    <section v-if="zipInspection" class="inspection-panel">
-      <div class="columns-header">
-        <h3>ZIP 구성 검사</h3>
-        <small>필수: SHP/DBF/SHX · 참고: PRJ/CPG</small>
-      </div>
-      <ul class="layer-list">
-        <li v-for="layer in zipInspection.layers" :key="layer.name">
-          <div class="layer-info">
-            <strong>{{ layer.name }}</strong>
-            <span v-if="layer.missingEssential.length" class="missing-text">
-              {{ layer.missingEssential.join(", ") }} 없음
-            </span>
-          </div>
-          <div class="chip-row">
-            <span class="chip" :class="{ 'chip--ok': layer.hasShp, 'chip--warn': !layer.hasShp }">.shp</span>
-            <span class="chip" :class="{ 'chip--ok': layer.hasDbf, 'chip--warn': !layer.hasDbf }">.dbf</span>
-            <span class="chip" :class="{ 'chip--ok': layer.hasShx, 'chip--warn': !layer.hasShx }">.shx</span>
-            <span class="chip" :class="{ 'chip--ok': layer.hasPrj, 'chip--muted': !layer.hasPrj }">.prj</span>
-            <span class="chip" :class="{ 'chip--ok': layer.hasCpg, 'chip--muted': !layer.hasCpg }">.cpg</span>
-          </div>
-        </li>
-      </ul>
-    </section>
+    <ZipInspectionPanel
+      v-if="zipInspection"
+      :inspection="zipInspection"
+    />
 
-    <section v-if="result" class="result-panel">
-      <div class="summary-cards">
-        <article>
-          <p class="label">파일명</p>
-          <strong class="value">{{ result.fileName }}</strong>
-        </article>
-        <article>
-          <p class="label">피처 수</p>
-          <strong class="value">{{ result.featureCount }}</strong>
-        </article>
-        <article>
-          <p class="label">지오메트리</p>
-          <strong class="value">
-            {{ result.geometryTypes.length ? result.geometryTypes.join(", ") : "없음" }}
-          </strong>
-        </article>
-      </div>
-
-      <div class="columns-header">
-        <h3>컬럼 채움 정도</h3>
-        <small>채워진 비율이 낮은 컬럼부터 정렬했어요.</small>
-      </div>
-
-      <div class="column-table">
-        <table>
-          <thead>
-            <tr>
-              <th>컬럼</th>
-              <th>채움률</th>
-              <th>빈 값</th>
-              <th>샘플</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="col in result.columns" :key="col.name" :class="{ 'is-empty': col.fillRate < 30 }">
-              <td>{{ col.name || "(이름 없음)" }}</td>
-              <td>{{ formatPercent(col.fillRate) }}</td>
-              <td>{{ col.empty }}</td>
-              <td>
-                <span v-if="col.samples.length">{{ col.samples.join(", ") }}</span>
-                <span v-else>샘플 없음</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <ResultPanel
+      v-if="result"
+      :result="result"
+    />
 
     <p v-else-if="errorMessage" class="error-text">
       {{ errorMessage }}
     </p>
   </div>
 </template>
-
-<style scoped>
-.popup-container {
-  width: 420px;
-  min-height: 420px;
-  max-height: 520px;
-  padding: 24px;
-  background: #fff;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.header h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.header p {
-  margin: 6px 0 0;
-  color: #4b5563;
-  font-size: 14px;
-}
-
-.drop-zone {
-  flex: 1;
-  border: 2px dashed #9ca3af;
-  border-radius: 12px;
-  padding: 32px;
-  text-align: center;
-  color: #6b7280;
-  background: #f9fafb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.drop-zone:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.drop-zone--active {
-  border-color: #2563eb;
-  background: #e0edff;
-}
-
-.drop-zone--loading {
-  border-style: solid;
-  color: #1f2937;
-}
-
-.inspection-panel {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 200px;
-  overflow: auto;
-}
-
-.layer-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.layer-info {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.missing-text {
-  color: #b91c1c;
-  font-size: 12px;
-}
-
-.chip-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.chip {
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 12px;
-  border: 1px solid #d1d5db;
-  color: #4b5563;
-}
-
-.chip--ok {
-  background: #ecfdf5;
-  border-color: #34d399;
-  color: #047857;
-}
-
-.chip--warn {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  color: #b91c1c;
-}
-
-.chip--muted {
-  opacity: 0.5;
-}
-
-.result-panel {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-height: 360px;
-  overflow: auto;
-}
-
-.summary-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.summary-cards article {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 12px;
-  background: #f9fafb;
-}
-
-.label {
-  margin: 0;
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.value {
-  display: block;
-  margin-top: 6px;
-  font-size: 14px;
-  color: #111827;
-  word-break: break-all;
-}
-
-.columns-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.columns-header h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.columns-header small {
-  color: #6b7280;
-}
-
-.column-table {
-  overflow: auto;
-}
-
-.column-table table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.column-table th,
-.column-table td {
-  text-align: left;
-  padding: 8px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.column-table th {
-  font-weight: 600;
-  color: #4b5563;
-}
-
-.column-table tr.is-empty td {
-  background: #fef2f2;
-  color: #991b1b;
-}
-
-.error-text {
-  margin: 0;
-  color: #dc2626;
-}
-</style>
