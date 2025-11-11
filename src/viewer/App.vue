@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import shp from "shpjs";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { iter } from "but-unzip";
 import DropZone from "./components/DropZone.vue";
 import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
@@ -18,6 +17,7 @@ import {
 } from "./types";
 import "./viewer.css";
 import { detectSridFromPrj } from "./utils/srid";
+import type { FeatureCollection } from "geojson";
 
 const isDragging = ref(false);
 const isLoading = ref(false);
@@ -26,6 +26,65 @@ const result = ref<ViewerResult | null>(null);
 const zipInspection = ref<ZipInspection | null>(null);
 const encoding = ref<EncodingOption>("utf-8");
 const srid = ref<SridCode | null>(null);
+const sourceBuffer = ref<ArrayBuffer | null>(null);
+const currentFileName = ref<string>("");
+const hasParsedOnce = ref(false);
+const currentCollection = ref<FeatureCollectionGeometry | null>(null);
+
+type WorkerMessage =
+  | { id: number; status: "success"; collection: FeatureCollection }
+  | { id: number; status: "error"; message: string };
+
+const parserWorker = new Worker(
+  new URL("./workers/parser.ts", import.meta.url),
+  { type: "module" },
+);
+
+let workerJobId = 0;
+const workerResolvers = new Map<
+  number,
+  {
+    resolve: (value: FeatureCollection) => void;
+    reject: (reason?: unknown) => void;
+  }
+>();
+
+parserWorker.addEventListener("message", (event: MessageEvent<WorkerMessage>) => {
+  const data = event.data;
+  const entry = workerResolvers.get(data.id);
+  if (!entry) return;
+  workerResolvers.delete(data.id);
+  if (data.status === "success") {
+    entry.resolve(data.collection);
+  } else {
+    entry.reject(new Error(data.message));
+  }
+});
+
+const parseWithWorker = (
+  buffer: ArrayBuffer,
+  encoding: EncodingOption,
+  sridCode: SridCode | null,
+) => {
+  const id = ++workerJobId;
+  const promise = new Promise<FeatureCollection>((resolve, reject) => {
+    workerResolvers.set(id, { resolve, reject });
+  });
+  parserWorker.postMessage(
+    {
+      id,
+      buffer,
+      encoding,
+      srid: sridCode,
+    },
+  );
+  return promise;
+};
+
+onBeforeUnmount(() => {
+  parserWorker.terminate();
+  workerResolvers.clear();
+});
 
 const resetDragState = () => {
   isDragging.value = false;
@@ -54,9 +113,13 @@ const onDrop = async (event: DragEvent) => {
   result.value = null;
   zipInspection.value = null;
   srid.value = null;
+  currentFileName.value = file.name;
+  sourceBuffer.value = null;
+  hasParsedOnce.value = false;
 
   try {
     const buffer = await file.arrayBuffer();
+    sourceBuffer.value = buffer;
     const inspection = await inspectZipEntries(buffer);
     zipInspection.value = inspection;
     if (inspection.detectedEncoding) {
@@ -70,9 +133,7 @@ const onDrop = async (event: DragEvent) => {
         "필수 구성(SHP/DBF/SHX)이 포함된 레이어를 찾을 수 없습니다.";
       return;
     }
-    const geojson = await shp(buffer);
-    const collection = normalizeCollection(geojson);
-    result.value = summarizeCollection(collection, file.name);
+    await runParse(buffer, { manageLoading: false });
   } catch (err) {
     console.error("[gongmiri] parse error", err);
     errorMessage.value = "SHP/DBF를 읽는 중 문제가 발생했습니다.";
@@ -179,6 +240,39 @@ const statusMessage = computed(() => {
   if (result.value) return `${result.value.fileName} 분석 완료`;
   return "Shapefile ZIP을 드래그하거나 선택하세요.";
 });
+
+let parseRunId = 0;
+
+const runParse = async (
+  buffer: ArrayBuffer,
+  options?: { manageLoading?: boolean },
+) => {
+  const manageLoading = options?.manageLoading ?? true;
+  const jobId = ++parseRunId;
+  if (manageLoading) isLoading.value = true;
+  try {
+    const geojson = await parseWithWorker(buffer, encoding.value, srid.value);
+    if (jobId !== parseRunId) return;
+    const collection = normalizeCollection(geojson);
+    currentCollection.value = collection;
+    const summaryName =
+      currentFileName.value ||
+      zipInspection.value?.layers[0]?.name ||
+      "파일";
+    result.value = summarizeCollection(collection, summaryName);
+    hasParsedOnce.value = true;
+    errorMessage.value = "";
+  } catch (err) {
+    if (jobId !== parseRunId) return;
+    console.error("[gongmiri] worker parse error", err);
+    errorMessage.value = "파싱 워커에서 오류가 발생했습니다.";
+    result.value = null;
+  } finally {
+    if (manageLoading && jobId === parseRunId) {
+      isLoading.value = false;
+    }
+  }
+};
 
 const inspectZipEntries = async (buffer: ArrayBuffer): Promise<ZipInspection> => {
   const bytes = new Uint8Array(buffer);
@@ -299,6 +393,11 @@ const parseEncodingLabel = (label: string): EncodingOption | undefined => {
   return undefined;
 };
 
+const triggerReparse = () => {
+  if (!sourceBuffer.value) return;
+  runParse(sourceBuffer.value);
+};
+
 watch(
   () => zipInspection.value?.detectedSridCode,
   (code) => {
@@ -307,6 +406,18 @@ watch(
     }
   },
 );
+
+watch(encoding, (next, prev) => {
+  if (!hasParsedOnce.value) return;
+  if (next === prev) return;
+  triggerReparse();
+});
+
+watch(srid, (next, prev) => {
+  if (!hasParsedOnce.value) return;
+  if (next === prev) return;
+  triggerReparse();
+});
 </script>
 
 <template>
