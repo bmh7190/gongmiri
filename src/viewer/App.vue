@@ -12,6 +12,7 @@ import {
   type ZipInspection,
   type ColumnStat,
   type ZipLayerStatus,
+  type EncodingOption,
 } from "./types";
 import "./viewer.css";
 
@@ -20,6 +21,7 @@ const isLoading = ref(false);
 const errorMessage = ref("");
 const result = ref<ViewerResult | null>(null);
 const zipInspection = ref<ZipInspection | null>(null);
+const encoding = ref<EncodingOption>("utf-8");
 
 const resetDragState = () => {
   isDragging.value = false;
@@ -50,8 +52,11 @@ const onDrop = async (event: DragEvent) => {
 
   try {
     const buffer = await file.arrayBuffer();
-    const inspection = inspectZipEntries(buffer);
+    const inspection = await inspectZipEntries(buffer);
     zipInspection.value = inspection;
+    if (inspection.detectedEncoding) {
+      encoding.value = inspection.detectedEncoding;
+    }
     if (!inspection.hasValidLayer) {
       errorMessage.value =
         "필수 구성(SHP/DBF/SHX)이 포함된 레이어를 찾을 수 없습니다.";
@@ -167,9 +172,13 @@ const statusMessage = computed(() => {
   return "Shapefile ZIP을 드래그하거나 선택하세요.";
 });
 
-const inspectZipEntries = (buffer: ArrayBuffer): ZipInspection => {
+const inspectZipEntries = async (buffer: ArrayBuffer): Promise<ZipInspection> => {
   const bytes = new Uint8Array(buffer);
   const layers = new Map<string, ZipLayerStatus>();
+  let hasCpg = false;
+  let hasPrj = false;
+  let detectedEncoding: EncodingOption | undefined;
+
 
   const mark = (layerName: string, ext: string) => {
     const existing =
@@ -216,7 +225,16 @@ const inspectZipEntries = (buffer: ArrayBuffer): ZipInspection => {
     const rawName = match[1];
     const extension = match[2];
     if (!rawName || !extension) continue;
-    mark(rawName, extension.toLowerCase());
+    const extLower = extension.toLowerCase();
+    mark(rawName, extLower);
+    if (extLower === "cpg") {
+      hasCpg = true;
+      if (!detectedEncoding) {
+        const text = await readEntryAsText(entry);
+        detectedEncoding = parseEncodingLabel(text);
+      }
+    }
+    if (extLower === "prj") hasPrj = true;
   }
 
   const finalized = Array.from(layers.values()).map((layer) => {
@@ -237,7 +255,30 @@ const inspectZipEntries = (buffer: ArrayBuffer): ZipInspection => {
   return {
     layers: finalized,
     hasValidLayer,
+    hasCpg,
+    hasPrj,
+    detectedEncoding,
   };
+};
+
+const readEntryAsText = async (entry: {
+  read: () => Promise<Uint8Array> | Uint8Array;
+}): Promise<string> => {
+  const data = entry.read();
+  const bytes = data instanceof Promise ? await data : data;
+  const decoder = new TextDecoder();
+  return decoder.decode(bytes).trim();
+};
+
+const parseEncodingLabel = (label: string): EncodingOption | undefined => {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("949") || normalized.includes("ksc") || normalized.includes("euc-kr")) {
+    return "cp949";
+  }
+  if (normalized.includes("utf-8") || normalized.includes("utf8")) {
+    return "utf-8";
+  }
+  return undefined;
 };
 </script>
 
@@ -258,6 +299,8 @@ const inspectZipEntries = (buffer: ArrayBuffer): ZipInspection => {
     <ZipInspectionPanel
       v-if="zipInspection"
       :inspection="zipInspection"
+      :encoding="encoding"
+      @change-encoding="encoding = $event"
     />
 
     <ResultPanel
