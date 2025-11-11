@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "gongmiri",
+  "version": "0.1.0",
+  "description": "공간데이터(SHP/ZIP) 다운로드 즉시 브라우저에서 미리보기",
+
+  "action": {
+    "default_title": "Open gongmiri",
+    "default_popup": "extension/viewer.html"
+  },
+
+  "permissions": ["storage"],
+
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+
+  "icons": {
+    "16": "extension/assets/icon-16.png",
+    "48": "extension/assets/icon-48.png",
+    "128": "extension/assets/icon-128.png"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["extension/viewer.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
