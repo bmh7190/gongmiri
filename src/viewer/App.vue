@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import shp from "shpjs";
 import { iter } from "but-unzip";
 import DropZone from "./components/DropZone.vue";
 import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
 import ResultPanel from "./components/ResultPanel.vue";
+import SridSelector from "./components/SridSelector.vue";
 import {
   type FeatureCollectionGeometry,
   type FeatureGeometry,
@@ -13,8 +14,10 @@ import {
   type ColumnStat,
   type ZipLayerStatus,
   type EncodingOption,
+  type SridCode,
 } from "./types";
 import "./viewer.css";
+import { detectSridFromPrj } from "./utils/srid";
 
 const isDragging = ref(false);
 const isLoading = ref(false);
@@ -22,6 +25,7 @@ const errorMessage = ref("");
 const result = ref<ViewerResult | null>(null);
 const zipInspection = ref<ZipInspection | null>(null);
 const encoding = ref<EncodingOption>("utf-8");
+const srid = ref<SridCode | null>(null);
 
 const resetDragState = () => {
   isDragging.value = false;
@@ -49,6 +53,7 @@ const onDrop = async (event: DragEvent) => {
   errorMessage.value = "";
   result.value = null;
   zipInspection.value = null;
+  srid.value = null;
 
   try {
     const buffer = await file.arrayBuffer();
@@ -56,6 +61,9 @@ const onDrop = async (event: DragEvent) => {
     zipInspection.value = inspection;
     if (inspection.detectedEncoding) {
       encoding.value = inspection.detectedEncoding;
+    }
+    if (inspection.detectedSridCode) {
+      srid.value = inspection.detectedSridCode;
     }
     if (!inspection.hasValidLayer) {
       errorMessage.value =
@@ -178,6 +186,8 @@ const inspectZipEntries = async (buffer: ArrayBuffer): Promise<ZipInspection> =>
   let hasCpg = false;
   let hasPrj = false;
   let detectedEncoding: EncodingOption | undefined;
+  let detectedSridCode: SridCode | undefined;
+  let prjText: string | undefined;
 
 
   const mark = (layerName: string, ext: string) => {
@@ -234,7 +244,13 @@ const inspectZipEntries = async (buffer: ArrayBuffer): Promise<ZipInspection> =>
         detectedEncoding = parseEncodingLabel(text);
       }
     }
-    if (extLower === "prj") hasPrj = true;
+    if (extLower === "prj") {
+      hasPrj = true;
+      if (!prjText) {
+        prjText = await readEntryAsText(entry);
+        detectedSridCode = detectSridFromPrj(prjText);
+      }
+    }
   }
 
   const finalized = Array.from(layers.values()).map((layer) => {
@@ -258,6 +274,8 @@ const inspectZipEntries = async (buffer: ArrayBuffer): Promise<ZipInspection> =>
     hasCpg,
     hasPrj,
     detectedEncoding,
+    detectedSridCode,
+    prjText,
   };
 };
 
@@ -280,6 +298,15 @@ const parseEncodingLabel = (label: string): EncodingOption | undefined => {
   }
   return undefined;
 };
+
+watch(
+  () => zipInspection.value?.detectedSridCode,
+  (code) => {
+    if (code && srid.value === null) {
+      srid.value = code;
+    }
+  },
+);
 </script>
 
 <template>
@@ -301,6 +328,13 @@ const parseEncodingLabel = (label: string): EncodingOption | undefined => {
       :inspection="zipInspection"
       :encoding="encoding"
       @change-encoding="encoding = $event"
+    />
+
+    <SridSelector
+      v-if="zipInspection"
+      :detected="zipInspection.detectedSridCode ?? null"
+      :selected="srid"
+      @update:selected="srid = $event"
     />
 
     <ResultPanel

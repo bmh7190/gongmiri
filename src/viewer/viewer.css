@@ -265,3 +265,45 @@
   margin: 0;
   color: #dc2626;
 }
+
+.srid-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.srid-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.srid-option {
+  display: flex;
+  gap: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+  align-items: flex-start;
+}
+
+.srid-option input[type="radio"] {
+  margin-top: 4px;
+}
+
+.srid-option__meta strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+  color: #111827;
+}
+
+.srid-option__meta p {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
