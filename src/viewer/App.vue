@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import type { FeatureCollection, Feature, Geometry } from "geojson";
 import shp from "shpjs";
+import { iter } from "but-unzip";
 
 type ColumnStat = {
   name: string;
@@ -18,10 +19,26 @@ type ViewerResult = {
   columns: ColumnStat[];
 };
 
+type ZipLayerStatus = {
+  name: string;
+  hasShp: boolean;
+  hasDbf: boolean;
+  hasShx: boolean;
+  hasPrj: boolean;
+  hasCpg: boolean;
+  missingEssential: string[];
+};
+
+type ZipInspection = {
+  layers: ZipLayerStatus[];
+  hasValidLayer: boolean;
+};
+
 const isDragging = ref(false);
 const isLoading = ref(false);
 const errorMessage = ref("");
 const result = ref<ViewerResult | null>(null);
+const zipInspection = ref<ZipInspection | null>(null);
 
 const prevent = (e: DragEvent) => {
   e.preventDefault();
@@ -50,9 +67,17 @@ const onDrop = async (event: DragEvent) => {
   isLoading.value = true;
   errorMessage.value = "";
   result.value = null;
+  zipInspection.value = null;
 
   try {
     const buffer = await file.arrayBuffer();
+    const inspection = inspectZipEntries(buffer);
+    zipInspection.value = inspection;
+    if (!inspection.hasValidLayer) {
+      errorMessage.value =
+        "필수 구성(SHP/DBF/SHX)이 포함된 레이어를 찾을 수 없습니다.";
+      return;
+    }
     const geojson = await shp(buffer);
     const collection = normalizeCollection(geojson);
     result.value = summarizeCollection(collection, file.name);
@@ -164,6 +189,79 @@ const statusMessage = computed(() => {
   if (result.value) return `${result.value.fileName} 분석 완료`;
   return "Shapefile ZIP을 드래그하거나 선택하세요.";
 });
+
+const inspectZipEntries = (buffer: ArrayBuffer): ZipInspection => {
+  const bytes = new Uint8Array(buffer);
+  const layers = new Map<string, ZipLayerStatus>();
+
+  const mark = (layerName: string, ext: string) => {
+    const existing =
+      layers.get(layerName) ??
+      {
+        name: layerName,
+        hasShp: false,
+        hasDbf: false,
+        hasShx: false,
+        hasPrj: false,
+        hasCpg: false,
+        missingEssential: [],
+      };
+
+    switch (ext) {
+      case "shp":
+        existing.hasShp = true;
+        break;
+      case "dbf":
+        existing.hasDbf = true;
+        break;
+      case "shx":
+        existing.hasShx = true;
+        break;
+      case "prj":
+        existing.hasPrj = true;
+        break;
+      case "cpg":
+        existing.hasCpg = true;
+        break;
+      default:
+        break;
+    }
+
+    layers.set(layerName, existing);
+  };
+
+  for (const entry of iter(bytes)) {
+    const normalized = entry.filename.replace(/\\/g, "/");
+    const leaf = normalized.split("/").pop();
+    if (!leaf) continue;
+    const match = leaf.match(/^(.+)\.(shp|dbf|shx|prj|cpg)$/i);
+    if (!match) continue;
+    const rawName = match[1];
+    const extension = match[2];
+    if (!rawName || !extension) continue;
+    mark(rawName, extension.toLowerCase());
+  }
+
+  const finalized = Array.from(layers.values()).map((layer) => {
+    const missing: string[] = [];
+    if (!layer.hasShp) missing.push(".shp");
+    if (!layer.hasDbf) missing.push(".dbf");
+    if (!layer.hasShx) missing.push(".shx");
+    return { ...layer, missingEssential: missing };
+  });
+
+  const hasValidLayer = finalized.some(
+    (layer) =>
+      layer.hasShp &&
+      layer.hasDbf &&
+      layer.hasShx,
+  );
+
+  return {
+    layers: finalized,
+    hasValidLayer,
+  };
+};
 </script>
 
 <template>
@@ -184,6 +282,30 @@ const statusMessage = computed(() => {
       <span v-if="isLoading">분석 중…</span>
       <span v-else>ZIP 파일 놓기</span>
     </div>
+
+    <section v-if="zipInspection" class="inspection-panel">
+      <div class="columns-header">
+        <h3>ZIP 구성 검사</h3>
+        <small>필수: SHP/DBF/SHX · 참고: PRJ/CPG</small>
+      </div>
+      <ul class="layer-list">
+        <li v-for="layer in zipInspection.layers" :key="layer.name">
+          <div class="layer-info">
+            <strong>{{ layer.name }}</strong>
+            <span v-if="layer.missingEssential.length" class="missing-text">
+              {{ layer.missingEssential.join(", ") }} 없음
+            </span>
+          </div>
+          <div class="chip-row">
+            <span class="chip" :class="{ 'chip--ok': layer.hasShp, 'chip--warn': !layer.hasShp }">.shp</span>
+            <span class="chip" :class="{ 'chip--ok': layer.hasDbf, 'chip--warn': !layer.hasDbf }">.dbf</span>
+            <span class="chip" :class="{ 'chip--ok': layer.hasShx, 'chip--warn': !layer.hasShx }">.shx</span>
+            <span class="chip" :class="{ 'chip--ok': layer.hasPrj, 'chip--muted': !layer.hasPrj }">.prj</span>
+            <span class="chip" :class="{ 'chip--ok': layer.hasCpg, 'chip--muted': !layer.hasCpg }">.cpg</span>
+          </div>
+        </li>
+      </ul>
+    </section>
 
     <section v-if="result" class="result-panel">
       <div class="summary-cards">
@@ -290,6 +412,68 @@ const statusMessage = computed(() => {
 .drop-zone--loading {
   border-style: solid;
   color: #1f2937;
+}
+
+.inspection-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.layer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.layer-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.missing-text {
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.chip-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  color: #4b5563;
+}
+
+.chip--ok {
+  background: #ecfdf5;
+  border-color: #34d399;
+  color: #047857;
+}
+
+.chip--warn {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.chip--muted {
+  opacity: 0.5;
 }
 
 .result-panel {
