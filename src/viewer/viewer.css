@@ -1,0 +1,198 @@
+.popup-container {
+  width: 420px;
+  min-height: 420px;
+  max-height: 520px;
+  padding: 24px;
+  background: #fff;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.header p {
+  margin: 6px 0 0;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.drop-zone {
+  flex: 1;
+  border: 2px dashed #9ca3af;
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  color: #6b7280;
+  background: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drop-zone:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.drop-zone--active {
+  border-color: #2563eb;
+  background: #e0edff;
+}
+
+.drop-zone--loading {
+  border-style: solid;
+  color: #1f2937;
+}
+
+.inspection-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.layer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.layer-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.missing-text {
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.chip-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  color: #4b5563;
+}
+
+.chip--ok {
+  background: #ecfdf5;
+  border-color: #34d399;
+  color: #047857;
+}
+
+.chip--warn {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.chip--muted {
+  opacity: 0.5;
+}
+
+.result-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.summary-cards article {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.label {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.value {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #111827;
+  word-break: break-all;
+}
+
+.columns-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.columns-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.columns-header small {
+  color: #6b7280;
+}
+
+.column-table {
+  overflow: auto;
+}
+
+.column-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.column-table th,
+.column-table td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.column-table th {
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.column-table tr.is-empty td {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.error-text {
+  margin: 0;
+  color: #dc2626;
+}
