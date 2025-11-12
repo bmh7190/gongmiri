@@ -125,11 +125,18 @@ const onDrop = async (event: DragEvent) => {
     errorMessage.value = "드롭한 파일을 찾지 못했습니다.";
     return;
   }
+  await processFile(file);
+};
+
+const onFileSelect = async (file: File) => {
+  await processFile(file);
+};
+
+const processFile = async (file: File) => {
   if (!/\.zip$/i.test(file.name)) {
     errorMessage.value = "ZIP 파일을 올려주세요.";
     return;
   }
-
   isLoading.value = true;
   errorMessage.value = "";
   result.value = null;
@@ -465,6 +472,7 @@ watch(srid, (next, prev) => {
           :is-loading="isLoading"
           @drop-file="onDrop"
           @drag-state="handleDragState"
+          @select-file="onFileSelect"
         />
 
         <ZipInspectionPanel
