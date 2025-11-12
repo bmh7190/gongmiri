@@ -2,7 +2,8 @@
 
 import { iter } from "but-unzip";
 import { parseDbf, parseShp, combine } from "shpjs";
-import type { FeatureCollection } from "geojson";
+import proj4 from "proj4";
+import type { FeatureCollection, Geometry, Position } from "geojson";
 import type {
   EncodingOption,
   FeatureCollectionGeometry,
@@ -39,6 +40,7 @@ type LayerEntry = {
 
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
+const WGS84 = proj4.WGS84;
 
 const cloneBuffer = (bytes: Uint8Array): ArrayBuffer =>
   bytes.slice().buffer;
@@ -89,6 +91,7 @@ const parseArchive = async (
   }
 
   const projOverride = sridToProj4(srid);
+  const transformer = createTransformer(srid);
 
   const collections: FeatureCollection[] = [];
   for (const layer of layers) {
@@ -106,6 +109,9 @@ const parseArchive = async (
     }
     const collection = combine([geometries, properties ?? []]) as FeatureCollectionGeometry;
     (collection as FeatureCollectionGeometry & { fileName?: string }).fileName = layer.fileName;
+    if (transformer) {
+      reprojectCollection(collection, transformer);
+    }
     collections.push(collection);
   }
 
@@ -158,5 +164,79 @@ const mapEncoding = (encoding: EncodingOption): string => {
       return "cp949";
     default:
       return "utf-8";
+  }
+};
+
+type TransformFn = (position: Position) => Position;
+
+const createTransformer = (srid: SridCode | null): TransformFn | null => {
+  const definition = sridToProj4(srid);
+  if (!definition) return null;
+  const converter = proj4(definition, WGS84);
+  return (position: Position): Position => {
+    const lon = position[0] ?? 0;
+    const lat = position[1] ?? 0;
+    const [x, y] = converter.forward([lon, lat]);
+    const hasZ = position.length > 2 && typeof position[2] === "number";
+    if (hasZ) {
+      const z = (position as [number, number, number])[2];
+      return [x, y, z];
+    }
+    return [x, y];
+  };
+};
+
+const reprojectCollection = (
+  collection: FeatureCollectionGeometry,
+  transform: TransformFn,
+) => {
+  for (const feature of collection.features ?? []) {
+    if (!feature.geometry) continue;
+    feature.geometry = reprojectGeometry(feature.geometry, transform);
+  }
+};
+
+const reprojectGeometry = (
+  geometry: Geometry,
+  transform: TransformFn,
+): Geometry => {
+  switch (geometry.type) {
+    case "Point":
+      return {
+        ...geometry,
+        coordinates: transform(geometry.coordinates as Position),
+      };
+    case "MultiPoint":
+    case "LineString":
+      return {
+        ...geometry,
+        coordinates: (geometry.coordinates as Position[]).map((pos) =>
+          transform(pos),
+        ),
+      };
+    case "MultiLineString":
+    case "Polygon":
+      return {
+        ...geometry,
+        coordinates: (geometry.coordinates as Position[][]).map((ring) =>
+          ring.map((pos) => transform(pos)),
+        ),
+      };
+    case "MultiPolygon":
+      return {
+        ...geometry,
+        coordinates: (geometry.coordinates as Position[][][]).map((poly) =>
+          poly.map((ring) => ring.map((pos) => transform(pos))),
+        ),
+      };
+    case "GeometryCollection":
+      return {
+        ...geometry,
+        geometries: geometry.geometries?.map((child) =>
+          reprojectGeometry(child, transform),
+        ),
+      };
+    default:
+      return geometry;
   }
 };

@@ -6,6 +6,7 @@ import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
 import ResultPanel from "./components/ResultPanel.vue";
 import SridSelector from "./components/SridSelector.vue";
 import AttributePreview from "./components/AttributePreview.vue";
+import SridModal from "./components/SridModal.vue";
 import {
   type FeatureCollectionGeometry,
   type FeatureGeometry,
@@ -31,6 +32,7 @@ const sourceBuffer = ref<ArrayBuffer | null>(null);
 const currentFileName = ref<string>("");
 const hasParsedOnce = ref(false);
 const currentCollection = ref<FeatureCollectionGeometry | null>(null);
+const sridModalVisible = ref(false);
 const hasFileLoaded = computed(() => Boolean(sourceBuffer.value));
 const sampleProperties = computed<Record<string, unknown> | null>(() => {
   const feature = currentCollection.value?.features?.[0];
@@ -114,6 +116,7 @@ const resetViewer = () => {
   currentFileName.value = "";
   currentCollection.value = null;
   hasParsedOnce.value = false;
+  sridModalVisible.value = false;
 };
 
 const onDrop = async (event: DragEvent) => {
@@ -160,6 +163,10 @@ const processFile = async (file: File) => {
     if (!inspection.hasValidLayer) {
       errorMessage.value =
         "필수 구성(SHP/DBF/SHX)이 포함된 레이어를 찾을 수 없습니다.";
+      return;
+    }
+    if (srid.value === null) {
+      sridModalVisible.value = true;
       return;
     }
     await runParse(buffer, { manageLoading: false });
@@ -425,6 +432,15 @@ const triggerReparse = () => {
   runParse(sourceBuffer.value);
 };
 
+const confirmSridSelection = async () => {
+  if (!sourceBuffer.value || srid.value === null) {
+    errorMessage.value = "SRID를 먼저 선택해주세요.";
+    return;
+  }
+  sridModalVisible.value = false;
+  await runParse(sourceBuffer.value);
+};
+
 watch(
   () => zipInspection.value?.detectedSridCode,
   (code) => {
@@ -524,5 +540,13 @@ watch(srid, (next, prev) => {
         </div>
       </div>
     </div>
+
+    <SridModal
+      v-if="sridModalVisible"
+      :selected="srid"
+      @update:selected="srid = $event"
+      @confirm="confirmSridSelection"
+      @cancel="resetViewer"
+    />
   </div>
 </template>
