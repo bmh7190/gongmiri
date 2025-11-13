@@ -10,6 +10,7 @@ import type {
   SridCode,
 } from "../types";
 import { SRID_OPTIONS } from "../utils/srid";
+import { logDebug, logWarn } from "../utils/logger";
 
 type ParseRequest = {
   id: number;
@@ -62,9 +63,20 @@ const normalizeCollection = (
 
 self.addEventListener("message", async (event: MessageEvent<ParseRequest>) => {
   const { id, buffer, encoding, srid } = event.data;
+  logDebug("[worker] parse request", {
+    id,
+    encoding,
+    srid,
+    bufferBytes: buffer.byteLength,
+  });
   try {
     const result = await parseArchive(buffer, encoding, srid);
     const collection = normalizeCollection(result);
+    logDebug("[worker] parse success", {
+      id,
+      featureCount: collection.features?.length ?? 0,
+      geometrySample: collection.features?.[0]?.geometry?.type ?? "n/a",
+    });
     const response: ParseSuccess = {
       id,
       status: "success",
@@ -74,6 +86,7 @@ self.addEventListener("message", async (event: MessageEvent<ParseRequest>) => {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "파싱 중 알 수 없는 오류가 발생했습니다.";
+    logWarn("[worker] parse failure", { id, message });
     const response: ParseError = { id, status: "error", message };
     postMessage(response);
   }
@@ -92,6 +105,11 @@ const parseArchive = async (
 
   const projOverride = sridToProj4(srid);
   const transformer = createTransformer(srid);
+  logDebug("[worker] layer summary", {
+    layerCount: layers.length,
+    override: Boolean(projOverride),
+    srid,
+  });
 
   const collections: FeatureCollection[] = [];
   for (const layer of layers) {
@@ -112,6 +130,13 @@ const parseArchive = async (
     if (transformer) {
       reprojectCollection(collection, transformer);
     }
+    logDebug("[worker] layer parsed", {
+      name: layer.fileName,
+      features: collection.features?.length ?? 0,
+      geometry: collection.features?.[0]?.geometry?.type ?? "n/a",
+      usedOverride: Boolean(projOverride),
+      hasPrj: Boolean(layer.prj),
+    });
     collections.push(collection);
   }
 
@@ -155,6 +180,9 @@ const collectEntries = async (buffer: ArrayBuffer): Promise<Record<string, Layer
     }
   }
 
+  logDebug("[worker] collected entries", {
+    layerNames: Object.keys(files),
+  });
   return files;
 };
 
