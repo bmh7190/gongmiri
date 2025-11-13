@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, shallowRef, watch, onBeforeUnmount } from "vue";
 import { iter } from "but-unzip";
 import DropZone from "./components/DropZone.vue";
 import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
 import ResultPanel from "./components/ResultPanel.vue";
-import SridSelector from "./components/SridSelector.vue";
 import AttributePreview from "./components/AttributePreview.vue";
 import SridModal from "./components/SridModal.vue";
+import MapPanel from "./components/MapPanel.vue";
 import {
   type FeatureCollectionGeometry,
   type FeatureGeometry,
@@ -20,6 +20,7 @@ import {
 import "./viewer.css";
 import { detectSridFromPrj } from "./utils/srid";
 import type { FeatureCollection } from "geojson";
+import { logDebug, logWarn } from "./utils/logger";
 
 const isDragging = ref(false);
 const isLoading = ref(false);
@@ -28,10 +29,12 @@ const result = ref<ViewerResult | null>(null);
 const zipInspection = ref<ZipInspection | null>(null);
 const encoding = ref<EncodingOption>("utf-8");
 const srid = ref<SridCode | null>(null);
+type SridMode = "file" | "manual";
+const sridMode = ref<SridMode>("file");
 const sourceBuffer = ref<ArrayBuffer | null>(null);
 const currentFileName = ref<string>("");
 const hasParsedOnce = ref(false);
-const currentCollection = ref<FeatureCollectionGeometry | null>(null);
+const currentCollection = shallowRef<FeatureCollectionGeometry | null>(null);
 const sridModalVisible = ref(false);
 const hasFileLoaded = computed(() => Boolean(sourceBuffer.value));
 const sampleProperties = computed<Record<string, unknown> | null>(() => {
@@ -112,6 +115,7 @@ const resetViewer = () => {
   zipInspection.value = null;
   result.value = null;
   srid.value = null;
+  sridMode.value = "file";
   encoding.value = "utf-8";
   currentFileName.value = "";
   currentCollection.value = null;
@@ -145,6 +149,7 @@ const processFile = async (file: File) => {
   result.value = null;
   zipInspection.value = null;
   srid.value = null;
+  sridMode.value = "file";
   currentFileName.value = file.name;
   sourceBuffer.value = null;
   hasParsedOnce.value = false;
@@ -157,15 +162,14 @@ const processFile = async (file: File) => {
     if (inspection.detectedEncoding) {
       encoding.value = inspection.detectedEncoding;
     }
-    if (inspection.detectedSridCode) {
-      srid.value = inspection.detectedSridCode;
-    }
+    srid.value = inspection.detectedSridCode ?? null;
+    sridMode.value = inspection.hasPrj ? "file" : "manual";
     if (!inspection.hasValidLayer) {
       errorMessage.value =
         "필수 구성(SHP/DBF/SHX)이 포함된 레이어를 찾을 수 없습니다.";
       return;
     }
-    if (srid.value === null) {
+    if (!inspection.hasPrj && srid.value === null) {
       sridModalVisible.value = true;
       return;
     }
@@ -285,7 +289,16 @@ const runParse = async (
   const jobId = ++parseRunId;
   if (manageLoading) isLoading.value = true;
   try {
-    const geojson = await parseWithWorker(buffer, encoding.value, srid.value);
+    const shouldOverride =
+      sridMode.value === "manual" || !zipInspection.value?.hasPrj;
+    const overrideCode = shouldOverride ? srid.value : null;
+    logDebug("runParse:start", {
+      jobId,
+      shouldOverride,
+      overrideCode,
+      encoding: encoding.value,
+    });
+    const geojson = await parseWithWorker(buffer, encoding.value, overrideCode);
     if (jobId !== parseRunId) return;
     const collection = normalizeCollection(geojson);
     currentCollection.value = collection;
@@ -296,11 +309,17 @@ const runParse = async (
     result.value = summarizeCollection(collection, summaryName);
     hasParsedOnce.value = true;
     errorMessage.value = "";
+    logDebug("runParse:complete", {
+      jobId,
+      featureCount: collection.features?.length ?? 0,
+      geometrySample: collection.features?.[0]?.geometry?.type ?? "n/a",
+    });
   } catch (err) {
     if (jobId !== parseRunId) return;
     console.error("[gongmiri] worker parse error", err);
     errorMessage.value = "파싱 워커에서 오류가 발생했습니다.";
     result.value = null;
+    logWarn("runParse:error", err);
   } finally {
     if (manageLoading && jobId === parseRunId) {
       isLoading.value = false;
@@ -437,6 +456,7 @@ const confirmSridSelection = async () => {
     errorMessage.value = "SRID를 먼저 선택해주세요.";
     return;
   }
+  sridMode.value = "manual";
   sridModalVisible.value = false;
   await runParse(sourceBuffer.value);
 };
@@ -459,8 +479,29 @@ watch(encoding, (next, prev) => {
 watch(srid, (next, prev) => {
   if (!hasParsedOnce.value) return;
   if (next === prev) return;
+  const shouldOverride =
+    sridMode.value === "manual" || !zipInspection.value?.hasPrj;
+  if (!shouldOverride) return;
   triggerReparse();
 });
+
+watch(sridMode, (mode, prev) => {
+  if (!hasParsedOnce.value) return;
+  if (mode === prev) return;
+  triggerReparse();
+});
+
+const handleSridUpdate = (next: SridCode) => {
+  srid.value = next;
+  sridMode.value = "manual";
+};
+
+const resetToFileProjection = () => {
+  if (!zipInspection.value?.hasPrj) return;
+  sridMode.value = "file";
+};
+
+const prjSummary = computed(() => zipInspection.value?.prjText ?? "");
 </script>
 
 <template>
@@ -497,16 +538,21 @@ watch(srid, (next, prev) => {
           :feature-count="result?.featureCount ?? null"
           :geometry-types="result?.geometryTypes ?? []"
         />
-
-        <SridSelector
-          v-if="zipInspection"
-          :detected="zipInspection.detectedSridCode ?? null"
-          :selected="srid"
-          @update:selected="srid = $event"
-        />
       </div>
 
       <div class="panel-stack panel-stack--right">
+        <MapPanel
+          v-if="hasFileLoaded"
+          :collection="currentCollection"
+          :srid="srid"
+          :srid-mode="sridMode"
+          :detected-srid="zipInspection?.detectedSridCode ?? null"
+          :has-prj="zipInspection?.hasPrj ?? false"
+          :prj-text="prjSummary"
+          @update:srid="handleSridUpdate"
+          @use-file-projection="resetToFileProjection"
+        />
+
         <ResultPanel
           v-if="result"
           :result="result"
