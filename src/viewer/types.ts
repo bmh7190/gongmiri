@@ -1,11 +1,31 @@
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 
+export type FeatureId = string;
+
+export type ColumnDataType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "mixed"
+  | "null"
+  | "other";
+
+export type NumericSummary = {
+  min: number;
+  max: number;
+  mean: number;
+};
+
 export type ColumnStat = {
   name: string;
   filled: number;
   empty: number;
   fillRate: number;
   samples: string[];
+  dataType: ColumnDataType;
+  uniqueCount: number | null;
+  uniqueRatio: number | null;
+  numericSummary: NumericSummary | null;
 };
 
 export type ViewerResult = {

@@ -7,6 +7,25 @@ const props = defineProps<{
 }>();
 
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+const formatRatioPercent = (ratio: number | null) =>
+  ratio === null ? "—" : `${(ratio * 100).toFixed(1)}%`;
+
+const formatDataType = (type: string) => {
+  switch (type) {
+    case "number":
+      return "숫자";
+    case "string":
+      return "문자";
+    case "boolean":
+      return "불리언";
+    case "mixed":
+      return "혼합";
+    case "null":
+      return "값 없음";
+    default:
+      return "기타";
+  }
+};
 
 const densityColumns = computed(() => props.result.columns);
 </script>
@@ -38,9 +57,19 @@ const densityColumns = computed(() => props.result.columns);
             :style="{ width: `${col.fillRate}%` }"
           />
         </div>
+        <p class="density-meta density-meta--top">
+          <span>{{ formatDataType(col.dataType) }}</span>
+          <span>NULL {{ col.empty }}</span>
+          <span v-if="col.uniqueRatio !== null">고유 {{ formatRatioPercent(col.uniqueRatio) }}</span>
+        </p>
         <p class="density-meta">
           <span>채움 {{ col.filled }}</span>
           <span>빈 값 {{ col.empty }}</span>
+        </p>
+        <p v-if="col.numericSummary" class="density-stats">
+          <span>min {{ col.numericSummary.min.toFixed(2) }}</span>
+          <span>max {{ col.numericSummary.max.toFixed(2) }}</span>
+          <span>mean {{ col.numericSummary.mean.toFixed(2) }}</span>
         </p>
       </article>
     </div>
