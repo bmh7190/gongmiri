@@ -7,7 +7,7 @@ import type {
   MapLayerMouseEvent,
   MapGeoJSONFeature,
 } from "maplibre-gl";
-import type { FeatureCollectionGeometry, SridCode } from "../types";
+import type { FeatureCollectionGeometry, FeatureGeometry, FeatureId, SridCode } from "../types";
 import type { Geometry, Position } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import SridSelector from "./SridSelector.vue";
@@ -20,11 +20,13 @@ const props = defineProps<{
   detectedSrid: SridCode | null;
   hasPrj: boolean;
   prjText?: string | null;
+  selectedFeatureId: FeatureId | null;
 }>();
 
 const emit = defineEmits<{
   (e: "update:srid", value: SridCode): void;
   (e: "use-file-projection"): void;
+  (e: "feature-focus", value: FeatureId | null): void;
 }>();
 
 const SOURCE_ID = "gongmiri-preview-source";
@@ -49,6 +51,7 @@ const isMapReady = ref(false);
 const popupRef = ref<maplibregl.Popup | null>(null);
 const showSridPanel = ref(false);
 const showPrjText = ref(false);
+const activeFeatureId = ref<FeatureId | null>(null);
 
 const hasFeatures = computed(
   () => Boolean(props.collection?.features?.length),
@@ -80,6 +83,7 @@ const initMap = () => {
     map.addSource(SOURCE_ID, {
       type: "geojson",
       data: EMPTY_COLLECTION,
+      promoteId: "id",
     });
     addLayers(map);
     registerInteractions(map);
@@ -96,6 +100,7 @@ const destroyMap = () => {
   mapInstance.value?.remove();
   mapInstance.value = null;
   isMapReady.value = false;
+  activeFeatureId.value = null;
 };
 
 const addLayers = (map: MapHandle) => {
@@ -104,8 +109,18 @@ const addLayers = (map: MapHandle) => {
     type: "fill",
     source: SOURCE_ID,
     paint: {
-      "fill-color": "#0ea5e9",
-      "fill-opacity": 0.2,
+      "fill-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        "#fbbf24",
+        "#0ea5e9",
+      ],
+      "fill-opacity": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        0.35,
+        0.2,
+      ],
     },
     filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
   });
@@ -115,8 +130,18 @@ const addLayers = (map: MapHandle) => {
     type: "line",
     source: SOURCE_ID,
     paint: {
-      "line-color": "#0284c7",
-      "line-width": 1.2,
+      "line-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        "#f59e0b",
+        "#0284c7",
+      ],
+      "line-width": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        2,
+        1.2,
+      ],
     },
     filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
   });
@@ -126,8 +151,18 @@ const addLayers = (map: MapHandle) => {
     type: "line",
     source: SOURCE_ID,
     paint: {
-      "line-color": "#f97316",
-      "line-width": 1.2,
+      "line-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        "#f59e0b",
+        "#f97316",
+      ],
+      "line-width": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        2,
+        1.2,
+      ],
     },
     filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false],
   });
@@ -137,10 +172,25 @@ const addLayers = (map: MapHandle) => {
     type: "circle",
     source: SOURCE_ID,
     paint: {
-      "circle-radius": 4,
-      "circle-color": "#22c55e",
+      "circle-radius": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        6,
+        4,
+      ],
+      "circle-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        "#facc15",
+        "#22c55e",
+      ],
       "circle-stroke-width": 1,
-      "circle-stroke-color": "#065f46",
+      "circle-stroke-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        "#92400e",
+        "#065f46",
+      ],
     },
     filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
   });
@@ -152,6 +202,9 @@ const registerInteractions = (map: MapHandle) => {
     if (!feature) return;
     focusOnFeature(event);
     showPopup(feature, event.lngLat);
+    if (feature.id !== undefined && feature.id !== null) {
+      emit("feature-focus", String(feature.id));
+    }
   };
 
   const hoverCursor = (enter: boolean) => {
@@ -246,6 +299,7 @@ const syncCollection = () => {
   } else {
     resetView();
   }
+  applyFeatureState(props.selectedFeatureId ?? null);
 };
 
 const updateLayerVisibility = (collection: FeatureCollectionGeometry) => {
@@ -273,6 +327,57 @@ const handleSridChange = (code: SridCode) => {
 
 const handleUseFileProjection = () => {
   emit("use-file-projection");
+};
+
+const applyFeatureState = (featureId: FeatureId | null) => {
+  if (!mapInstance.value) return;
+  if (activeFeatureId.value) {
+    try {
+      mapInstance.value.setFeatureState(
+        { source: SOURCE_ID, id: activeFeatureId.value },
+        { selected: false },
+      );
+    } catch (error) {
+      logDebug("mapPanel:clear-state", error);
+    }
+  }
+  if (featureId) {
+    try {
+      mapInstance.value.setFeatureState(
+        { source: SOURCE_ID, id: featureId },
+        { selected: true },
+      );
+    } catch (error) {
+      logDebug("mapPanel:set-state", error);
+    }
+  }
+  activeFeatureId.value = featureId;
+};
+
+const focusFeatureById = (featureId: FeatureId | null) => {
+  if (!featureId || !mapInstance.value) return;
+  const feature = props.collection?.features?.find((item) => item.id === featureId);
+  if (!feature?.geometry) return;
+  const bounds = computeBounds({
+    type: "FeatureCollection",
+    features: [feature as FeatureGeometry],
+  });
+  if (!bounds) return;
+  const [[minX, minY], [maxX, maxY]] = bounds;
+  const isPoint = minX === maxX && minY === maxY;
+  if (isPoint) {
+    mapInstance.value.easeTo({
+      center: [minX, minY],
+      duration: 500,
+      zoom: Math.max(mapInstance.value.getZoom(), 9),
+    });
+    return;
+  }
+  mapInstance.value.fitBounds(bounds, {
+    padding: 40,
+    maxZoom: 13,
+    duration: 500,
+  });
 };
 
 const hasGeometry = (
@@ -416,6 +521,17 @@ watch(
   () => props.collection,
   () => {
     syncCollection();
+  },
+);
+
+watch(
+  () => props.selectedFeatureId,
+  (next, prev) => {
+    if (!isMapReady.value) return;
+    applyFeatureState(next ?? null);
+    if (next && next !== prev) {
+      focusFeatureById(next);
+    }
   },
 );
 </script>

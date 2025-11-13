@@ -4,9 +4,9 @@ import { iter } from "but-unzip";
 import DropZone from "./components/DropZone.vue";
 import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
 import ResultPanel from "./components/ResultPanel.vue";
-import AttributePreview from "./components/AttributePreview.vue";
 import SridModal from "./components/SridModal.vue";
 import MapPanel from "./components/MapPanel.vue";
+import DataGrid from "./components/DataGrid.vue";
 import {
   type FeatureCollectionGeometry,
   type FeatureGeometry,
@@ -16,6 +16,7 @@ import {
   type ZipLayerStatus,
   type EncodingOption,
   type SridCode,
+  type FeatureId,
 } from "./types";
 import "./viewer.css";
 import { detectSridFromPrj } from "./utils/srid";
@@ -36,11 +37,8 @@ const currentFileName = ref<string>("");
 const hasParsedOnce = ref(false);
 const currentCollection = shallowRef<FeatureCollectionGeometry | null>(null);
 const sridModalVisible = ref(false);
+const selectedFeatureId = ref<FeatureId | null>(null);
 const hasFileLoaded = computed(() => Boolean(sourceBuffer.value));
-const sampleProperties = computed<Record<string, unknown> | null>(() => {
-  const feature = currentCollection.value?.features?.[0];
-  return feature?.properties ?? null;
-});
 
 let parseRunId = 0;
 
@@ -121,6 +119,7 @@ const resetViewer = () => {
   currentCollection.value = null;
   hasParsedOnce.value = false;
   sridModalVisible.value = false;
+  selectedFeatureId.value = null;
 };
 
 const onDrop = async (event: DragEvent) => {
@@ -153,6 +152,7 @@ const processFile = async (file: File) => {
   currentFileName.value = file.name;
   sourceBuffer.value = null;
   hasParsedOnce.value = false;
+  selectedFeatureId.value = null;
 
   try {
     const buffer = await file.arrayBuffer();
@@ -212,51 +212,172 @@ const normalizeCollection = (
   throw new Error("지원하지 않는 GeoJSON 형식입니다.");
 };
 
+const UNIQUE_TRACK_LIMIT = 2000;
+
+const toFeatureId = (value: unknown): FeatureId =>
+  String(value ?? "");
+
+const ensureFeatureIds = (collection: FeatureCollectionGeometry) => {
+  collection.features?.forEach((feature, index) => {
+    const candidate =
+      feature.id ??
+      feature.properties?.OBJECTID ??
+      feature.properties?.id ??
+      feature.properties?.ID ??
+      `feature-${index}`;
+    feature.id = toFeatureId(candidate);
+  });
+};
+
+const hasFeatureId = (collection: FeatureCollectionGeometry, id: FeatureId | null): boolean => {
+  if (!id) return false;
+  return (
+    collection.features?.some(
+      (feature) => toFeatureId(feature.id) === id,
+    ) ??
+    false
+  );
+};
+
+const detectValueType = (value: unknown): ColumnStat["dataType"] => {
+  if (value === null || value === undefined) return "null";
+  const type = typeof value;
+  if (type === "number" && Number.isFinite(value as number)) return "number";
+  if (type === "number") return "other";
+  if (type === "string") return "string";
+  if (type === "boolean") return "boolean";
+  return "other";
+};
+
 const summarizeCollection = (
   collection: FeatureCollectionGeometry,
   fileName: string,
 ): ViewerResult => {
   const features: FeatureGeometry[] = collection.features ?? [];
-  const allColumns = new Set<string>();
 
-  for (const feature of features) {
-    if (feature.properties) {
-      Object.keys(feature.properties).forEach((key) => allColumns.add(key));
+  type ColumnAggregate = {
+    filled: number;
+    empty: number;
+    samples: string[];
+    observedTypes: Set<ColumnStat["dataType"]>;
+    uniqueValues: Set<string>;
+    uniqueOverflow: boolean;
+    numeric: { min: number; max: number; sum: number; count: number } | null;
+  };
+
+  const aggregates = new Map<string, ColumnAggregate>();
+
+  const registerValue = (name: string, value: unknown) => {
+    const aggregate =
+      aggregates.get(name) ??
+      aggregates.set(name, {
+        filled: 0,
+        empty: 0,
+        samples: [],
+        observedTypes: new Set(),
+        uniqueValues: new Set(),
+        uniqueOverflow: false,
+        numeric: null,
+      }).get(name)!;
+
+    const isEmpty =
+      value === null ||
+      value === undefined ||
+      (typeof value === "string" && value.trim() === "");
+
+    if (isEmpty) {
+      aggregate.empty += 1;
+      aggregate.observedTypes.add("null");
+      return;
     }
-  }
 
-  const columns = Array.from(allColumns).map<ColumnStat>((name) => {
-    let filled = 0;
-    let empty = 0;
-    const samples: string[] = [];
+    aggregate.filled += 1;
+    const valueType = detectValueType(value);
+    aggregate.observedTypes.add(valueType);
+    if (aggregate.samples.length < 3) {
+      aggregate.samples.push(String(value));
+    }
 
-    for (const feature of features) {
-      const value = feature.properties?.[name];
-      const isEmpty =
-        value === null ||
-        value === undefined ||
-        (typeof value === "string" && value.trim() === "");
-
-      if (isEmpty) {
-        empty += 1;
-      } else {
-        filled += 1;
-        if (samples.length < 3) samples.push(String(value));
+    if (!aggregate.uniqueOverflow) {
+      const key =
+        typeof value === "object" ? JSON.stringify(value) : String(value);
+      aggregate.uniqueValues.add(key);
+      if (aggregate.uniqueValues.size > UNIQUE_TRACK_LIMIT) {
+        aggregate.uniqueOverflow = true;
       }
     }
 
-    const fillRate = features.length
-      ? (filled / features.length) * 100
-      : 0;
+    if (valueType === "number") {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) return;
+      if (!aggregate.numeric) {
+        aggregate.numeric = {
+          min: numericValue,
+          max: numericValue,
+          sum: numericValue,
+          count: 1,
+        };
+      } else {
+        aggregate.numeric.min = Math.min(aggregate.numeric.min, numericValue);
+        aggregate.numeric.max = Math.max(aggregate.numeric.max, numericValue);
+        aggregate.numeric.sum += numericValue;
+        aggregate.numeric.count += 1;
+      }
+    }
+  };
 
-    return {
-      name,
-      filled,
-      empty,
-      fillRate,
-      samples,
-    };
-  });
+  for (const feature of features) {
+    const properties = feature.properties ?? {};
+    for (const [name, value] of Object.entries(properties)) {
+      registerValue(name, value);
+    }
+  }
+
+  const columns: ColumnStat[] = Array.from(aggregates.entries()).map(
+    ([name, aggregate]) => {
+      const filled = aggregate.filled;
+      const empty = aggregate.empty;
+      const fillRate = features.length ? (filled / features.length) * 100 : 0;
+      const observed = Array.from(aggregate.observedTypes).filter(
+        (type) => type !== "null",
+      );
+      const dataType =
+        filled === 0
+          ? "null"
+          : observed.length === 1
+            ? observed[0]!
+            : observed.length === 0
+              ? "null"
+              : "mixed";
+      const uniqueCount = aggregate.uniqueOverflow
+        ? null
+        : aggregate.uniqueValues.size;
+      const uniqueRatio =
+        uniqueCount !== null && features.length
+          ? uniqueCount / features.length
+          : null;
+      const numericSummary =
+        aggregate.numeric && aggregate.numeric.count
+          ? {
+              min: aggregate.numeric.min,
+              max: aggregate.numeric.max,
+              mean: aggregate.numeric.sum / aggregate.numeric.count,
+            }
+          : null;
+
+      return {
+        name,
+        filled,
+        empty,
+        fillRate,
+        samples: aggregate.samples,
+        dataType,
+        uniqueCount,
+        uniqueRatio,
+        numericSummary,
+      };
+    },
+  );
 
   columns.sort((a, b) => a.fillRate - b.fillRate);
 
@@ -288,6 +409,7 @@ const runParse = async (
   const manageLoading = options?.manageLoading ?? true;
   const jobId = ++parseRunId;
   if (manageLoading) isLoading.value = true;
+  const previousSelection = selectedFeatureId.value;
   try {
     const shouldOverride =
       sridMode.value === "manual" || !zipInspection.value?.hasPrj;
@@ -301,6 +423,7 @@ const runParse = async (
     const geojson = await parseWithWorker(buffer, encoding.value, overrideCode);
     if (jobId !== parseRunId) return;
     const collection = normalizeCollection(geojson);
+    ensureFeatureIds(collection);
     currentCollection.value = collection;
     const summaryName =
       currentFileName.value ||
@@ -309,6 +432,12 @@ const runParse = async (
     result.value = summarizeCollection(collection, summaryName);
     hasParsedOnce.value = true;
     errorMessage.value = "";
+    if (previousSelection && hasFeatureId(collection, previousSelection)) {
+      selectedFeatureId.value = previousSelection;
+    } else {
+      const firstId = collection.features?.[0]?.id;
+      selectedFeatureId.value = firstId ? toFeatureId(firstId) : null;
+    }
     logDebug("runParse:complete", {
       jobId,
       featureCount: collection.features?.length ?? 0,
@@ -502,6 +631,14 @@ const resetToFileProjection = () => {
 };
 
 const prjSummary = computed(() => zipInspection.value?.prjText ?? "");
+
+const handleGridSelection = (id: FeatureId) => {
+  selectedFeatureId.value = id;
+};
+
+const handleFeatureFocusFromMap = (id: FeatureId | null) => {
+  selectedFeatureId.value = id;
+};
 </script>
 
 <template>
@@ -549,8 +686,10 @@ const prjSummary = computed(() => zipInspection.value?.prjText ?? "");
           :detected-srid="zipInspection?.detectedSridCode ?? null"
           :has-prj="zipInspection?.hasPrj ?? false"
           :prj-text="prjSummary"
+          :selected-feature-id="selectedFeatureId"
           @update:srid="handleSridUpdate"
           @use-file-projection="resetToFileProjection"
+          @feature-focus="handleFeatureFocusFromMap"
         />
 
         <ResultPanel
@@ -562,20 +701,23 @@ const prjSummary = computed(() => zipInspection.value?.prjText ?? "");
           @change-encoding="encoding = $event"
         />
 
-        <AttributePreview
-          v-if="sampleProperties"
-          :properties="sampleProperties"
+        <DataGrid
+          v-if="currentCollection && result"
+          :collection="currentCollection"
+          :columns="result.columns"
+          :selected-id="selectedFeatureId"
           :encoding="encoding"
           :detected-encoding="zipInspection?.detectedEncoding"
           :has-cpg="zipInspection?.hasCpg"
+          @select="handleGridSelection"
           @change-encoding="encoding = $event"
         />
 
-        <div v-else-if="errorMessage" class="alert-card">
+        <div v-if="errorMessage" class="alert-card">
           <p>{{ errorMessage }}</p>
         </div>
 
-        <div v-else class="placeholder-card">
+        <div v-else-if="!result" class="placeholder-card">
           <h3>ZIP 파일을 드롭해 보세요</h3>
           <p>다운로드한 Shapefile ZIP을 놓으면 구성 검사, 인코딩·좌표계 추정, 속성 요약이 순서대로 표시됩니다.</p>
           <ul>
