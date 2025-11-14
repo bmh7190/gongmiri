@@ -8,6 +8,9 @@ import SridModal from "./components/SridModal.vue";
 import MapPanel from "./components/MapPanel.vue";
 import DataGrid from "./components/DataGrid.vue";
 import VisualizationPanel from "./components/VisualizationPanel.vue";
+import LargeDatasetModal from "./components/LargeDatasetModal.vue";
+import LargeDatasetBanner from "./components/LargeDatasetBanner.vue";
+import ParseProgressBar from "./components/ParseProgressBar.vue";
 import {
   type FeatureCollectionGeometry,
   type FeatureGeometry,
@@ -20,10 +23,13 @@ import {
   type FeatureId,
   type VisualizationSettings,
   type VisualizationConfig,
+  type ParseMode,
+  type ParseProgress,
+  type LargeDatasetState,
 } from "./types";
 import "./viewer.css";
 import { detectSridFromPrj } from "./utils/srid";
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Geometry, Position } from "geojson";
 import { logDebug, logWarn } from "./utils/logger";
 import {
   buildCategoryStops,
@@ -49,6 +55,23 @@ const currentCollection = shallowRef<FeatureCollectionGeometry | null>(null);
 const sridModalVisible = ref(false);
 const selectedFeatureId = ref<FeatureId | null>(null);
 const hasFileLoaded = computed(() => Boolean(sourceBuffer.value));
+const parseMode = ref<ParseMode>("full");
+const parseProgress = ref<ParseProgress | null>(null);
+const largeDataset = ref<LargeDatasetState>({
+  fileBytes: 0,
+  featureCount: 0,
+  isLargeFile: false,
+  isLargeFeature: false,
+});
+const largeModalVisible = ref(false);
+const largeModalReason = ref<"file" | "feature" | null>(null);
+const hasAcknowledgedLargeFile = ref(false);
+const hasAcknowledgedLargeFeature = ref(false);
+
+const LARGE_FILE_BYTES = 100 * 1024 * 1024;
+const LARGE_FEATURE_THRESHOLD = 100_000;
+const QUICK_SAMPLE_TARGET = 25_000;
+const QUICK_COORD_DECIMALS = 5;
 
 const createDefaultVisualization = (): VisualizationSettings => ({
   colorMode: "default",
@@ -95,11 +118,16 @@ const visualizationConfig = computed<VisualizationConfig>(() => {
   };
 });
 
-const hasPointGeometry = computed(() =>
-  currentCollection.value?.features?.some((feature) => {
+const collectionHasPointGeometry = (
+  collection: FeatureCollectionGeometry | null,
+): boolean =>
+  collection?.features?.some((feature) => {
     const type = feature.geometry?.type;
     return type === "Point" || type === "MultiPoint";
-  }) ?? false,
+  }) ?? false;
+
+const hasPointGeometry = computed(() =>
+  collectionHasPointGeometry(currentCollection.value),
 );
 
 const categoryLegend = computed(() => visualizationConfig.value.categoryStops);
@@ -156,6 +184,16 @@ const sizeLegend = computed(() => {
   };
 });
 
+const parseStats = ref({ total: 0, displayed: 0 });
+
+const isLargeDataset = computed(
+  () => largeDataset.value.isLargeFile || largeDataset.value.isLargeFeature,
+);
+
+const shouldShowLargeBanner = computed(
+  () => isLargeDataset.value || parseMode.value === "quick",
+);
+
 const updateVisualization = (partial: Partial<VisualizationSettings>) => {
   const next: VisualizationSettings = {
     ...visualizationSettings.value,
@@ -165,6 +203,127 @@ const updateVisualization = (partial: Partial<VisualizationSettings>) => {
     next.pointSizeRange = normalizeSizeRange(partial.pointSizeRange);
   }
   visualizationSettings.value = next;
+};
+
+const toggleParseMode = async (mode: ParseMode) => {
+  if (parseMode.value === mode) return;
+  parseMode.value = mode;
+  if (!sourceBuffer.value) return;
+  await runParse(sourceBuffer.value);
+};
+
+const openLargeModal = (reason: "file" | "feature") => {
+  largeModalReason.value = reason;
+  largeModalVisible.value = true;
+};
+
+const handleLargeModalSelect = async (mode: ParseMode) => {
+  const previousMode = parseMode.value;
+  const reason = largeModalReason.value;
+  parseMode.value = mode;
+  if (reason === "file") {
+    hasAcknowledgedLargeFile.value = true;
+  }
+  if (reason === "feature") {
+    hasAcknowledgedLargeFeature.value = true;
+  }
+  largeModalVisible.value = false;
+  largeModalReason.value = null;
+  if (!sourceBuffer.value) return;
+  const shouldReparse = reason === "file" || previousMode !== mode;
+  if (!shouldReparse) return;
+  await runParse(sourceBuffer.value);
+};
+
+const closeLargeModal = () => {
+  const reason = largeModalReason.value;
+  const wasFilePrompt = reason === "file" && !hasParsedOnce.value;
+  largeModalVisible.value = false;
+  largeModalReason.value = null;
+  if (wasFilePrompt) {
+    resetViewer();
+  }
+};
+
+const applyQuickPreview = (
+  collection: FeatureCollectionGeometry,
+): FeatureCollectionGeometry => {
+  const features = collection.features ?? [];
+  if (features.length <= QUICK_SAMPLE_TARGET) {
+    return {
+      type: "FeatureCollection",
+      features: features.map((feature) => cloneFeatureWithRoundedGeometry(feature)),
+    };
+  }
+  const stride = Math.max(1, Math.floor(features.length / QUICK_SAMPLE_TARGET));
+  const sampled: FeatureGeometry[] = [];
+  for (let index = 0; index < features.length; index += stride) {
+    if (sampled.length >= QUICK_SAMPLE_TARGET) break;
+    const feature = features[index];
+    if (!feature) continue;
+    sampled.push(cloneFeatureWithRoundedGeometry(feature));
+  }
+  return {
+    type: "FeatureCollection",
+    features: sampled,
+  };
+};
+
+const cloneFeatureWithRoundedGeometry = (
+  feature: FeatureGeometry,
+): FeatureGeometry => ({
+  type: "Feature",
+  geometry: roundGeometry(feature.geometry),
+  properties: feature.properties ? { ...feature.properties } : {},
+  id: feature.id,
+});
+
+const roundGeometry = (geometry: Geometry): Geometry => {
+  switch (geometry.type) {
+    case "Point":
+      return {
+        ...geometry,
+        coordinates: roundPosition(geometry.coordinates as Position),
+      };
+    case "MultiPoint":
+    case "LineString":
+      return {
+        ...geometry,
+        coordinates: (geometry.coordinates as Position[]).map((coord) =>
+          roundPosition(coord),
+        ),
+      };
+    case "MultiLineString":
+    case "Polygon":
+      return {
+        ...geometry,
+        coordinates: (geometry.coordinates as Position[][]).map((ring) =>
+          ring.map((coord) => roundPosition(coord)),
+        ),
+      };
+    case "MultiPolygon":
+      return {
+        ...geometry,
+        coordinates: (geometry.coordinates as Position[][][]).map((polygon) =>
+          polygon.map((ring) => ring.map((coord) => roundPosition(coord))),
+        ),
+      };
+    case "GeometryCollection":
+      return {
+        ...geometry,
+        geometries: geometry.geometries?.map((child) => roundGeometry(child)) ?? [],
+      };
+    default:
+      return geometry;
+  }
+};
+
+const roundPosition = (position: Position): Position => {
+  return position.map((value) =>
+    typeof value === "number"
+      ? Number(value.toFixed(QUICK_COORD_DECIMALS))
+      : value,
+  ) as Position;
 };
 
 const sanitizeVisualizationSelections = () => {
@@ -208,7 +367,8 @@ let parseRunId = 0;
 
 type WorkerMessage =
   | { id: number; status: "success"; collection: FeatureCollection }
-  | { id: number; status: "error"; message: string };
+  | { id: number; status: "error"; message: string }
+  | { id: number; status: "progress"; label: string; percent: number };
 
 const parserWorker = new Worker(
   new URL("./workers/parser.ts", import.meta.url),
@@ -226,12 +386,21 @@ const workerResolvers = new Map<
 
 parserWorker.addEventListener("message", (event: MessageEvent<WorkerMessage>) => {
   const data = event.data;
+  if (data.status === "progress") {
+    parseProgress.value = {
+      label: data.label,
+      percent: data.percent,
+    };
+    return;
+  }
   const entry = workerResolvers.get(data.id);
   if (!entry) return;
   workerResolvers.delete(data.id);
   if (data.status === "success") {
+    parseProgress.value = null;
     entry.resolve(data.collection);
   } else {
+    parseProgress.value = null;
     entry.reject(new Error(data.message));
   }
 });
@@ -284,6 +453,19 @@ const resetViewer = () => {
   hasParsedOnce.value = false;
   sridModalVisible.value = false;
   selectedFeatureId.value = null;
+  parseMode.value = "full";
+  parseProgress.value = null;
+  largeDataset.value = {
+    fileBytes: 0,
+    featureCount: 0,
+    isLargeFile: false,
+    isLargeFeature: false,
+  };
+  largeModalVisible.value = false;
+  largeModalReason.value = null;
+  hasAcknowledgedLargeFile.value = false;
+  hasAcknowledgedLargeFeature.value = false;
+  parseStats.value = { total: 0, displayed: 0 };
   visualizationSettings.value = createDefaultVisualization();
 };
 
@@ -318,6 +500,19 @@ const processFile = async (file: File) => {
   sourceBuffer.value = null;
   hasParsedOnce.value = false;
   selectedFeatureId.value = null;
+  parseMode.value = "full";
+  parseProgress.value = null;
+  parseStats.value = { total: 0, displayed: 0 };
+  largeDataset.value = {
+    fileBytes: file.size,
+    featureCount: 0,
+    isLargeFile: file.size >= LARGE_FILE_BYTES,
+    isLargeFeature: false,
+  };
+  hasAcknowledgedLargeFile.value = !largeDataset.value.isLargeFile;
+  hasAcknowledgedLargeFeature.value = false;
+  largeModalVisible.value = false;
+  largeModalReason.value = null;
 
   try {
     const buffer = await file.arrayBuffer();
@@ -336,6 +531,10 @@ const processFile = async (file: File) => {
     }
     if (!inspection.hasPrj && srid.value === null) {
       sridModalVisible.value = true;
+      return;
+    }
+    if (largeDataset.value.isLargeFile && !hasAcknowledgedLargeFile.value) {
+      openLargeModal("file");
       return;
     }
     await runParse(buffer, { manageLoading: false });
@@ -589,30 +788,70 @@ const runParse = async (
     if (jobId !== parseRunId) return;
     const collection = normalizeCollection(geojson);
     ensureFeatureIds(collection);
-    currentCollection.value = collection;
+    const totalFeatures = collection.features?.length ?? 0;
+    largeDataset.value = {
+      ...largeDataset.value,
+      featureCount: totalFeatures,
+      isLargeFeature: totalFeatures >= LARGE_FEATURE_THRESHOLD,
+    };
+    parseStats.value = {
+      total: totalFeatures,
+      displayed: totalFeatures,
+    };
+    let workingCollection: FeatureCollectionGeometry = collection;
+    if (parseMode.value === "quick") {
+      workingCollection = applyQuickPreview(collection);
+      ensureFeatureIds(workingCollection);
+      parseStats.value = {
+        total: totalFeatures,
+        displayed: workingCollection.features?.length ?? 0,
+      };
+    }
+    currentCollection.value = workingCollection;
     const summaryName =
       currentFileName.value ||
       zipInspection.value?.layers[0]?.name ||
       "파일";
-    result.value = summarizeCollection(collection, summaryName);
+    parseProgress.value = {
+      label: "결과 요약 중",
+      percent: 98,
+    };
+    result.value = summarizeCollection(workingCollection, summaryName);
     hasParsedOnce.value = true;
     errorMessage.value = "";
-    if (previousSelection && hasFeatureId(collection, previousSelection)) {
+    const selectionSource = workingCollection;
+    if (previousSelection && hasFeatureId(selectionSource, previousSelection)) {
       selectedFeatureId.value = previousSelection;
     } else {
-      const firstId = collection.features?.[0]?.id;
+      const firstId = selectionSource.features?.[0]?.id;
       selectedFeatureId.value = firstId ? toFeatureId(firstId) : null;
     }
+    if (
+      parseMode.value === "quick" &&
+      collectionHasPointGeometry(workingCollection) &&
+      !visualizationSettings.value.cluster
+    ) {
+      updateVisualization({ cluster: true });
+    }
+    if (
+      largeDataset.value.isLargeFeature &&
+      parseMode.value === "full" &&
+      !hasAcknowledgedLargeFeature.value
+    ) {
+      openLargeModal("feature");
+    }
+    parseProgress.value = null;
     logDebug("runParse:complete", {
       jobId,
-      featureCount: collection.features?.length ?? 0,
-      geometrySample: collection.features?.[0]?.geometry?.type ?? "n/a",
+      featureCount: workingCollection.features?.length ?? 0,
+      geometrySample: workingCollection.features?.[0]?.geometry?.type ?? "n/a",
     });
   } catch (err) {
     if (jobId !== parseRunId) return;
     console.error("[gongmiri] worker parse error", err);
     errorMessage.value = "파싱 워커에서 오류가 발생했습니다.";
     result.value = null;
+    parseProgress.value = null;
     logWarn("runParse:error", err);
   } finally {
     if (manageLoading && jobId === parseRunId) {
@@ -782,6 +1021,16 @@ watch(encoding, (next, prev) => {
   triggerReparse();
 });
 
+watch(
+  () => parseMode.value,
+  (mode) => {
+    if (mode === "quick") {
+      hasAcknowledgedLargeFile.value = true;
+      hasAcknowledgedLargeFeature.value = true;
+    }
+  },
+);
+
 watch(srid, (next, prev) => {
   if (!hasParsedOnce.value) return;
   if (next === prev) return;
@@ -863,6 +1112,22 @@ watch(
       </div>
 
       <div class="panel-stack panel-stack--right">
+        <ParseProgressBar
+          v-if="parseProgress"
+          :progress="parseProgress"
+        />
+
+        <LargeDatasetBanner
+          v-if="shouldShowLargeBanner"
+          :parse-mode="parseMode"
+          :file-bytes="largeDataset.fileBytes"
+          :total-features="parseStats.total"
+          :displayed-features="parseStats.displayed"
+          :is-large-file="largeDataset.isLargeFile"
+          :is-large-feature="largeDataset.isLargeFeature"
+          @select-mode="toggleParseMode"
+        />
+
         <MapPanel
           v-if="hasFileLoaded"
           :collection="currentCollection"
@@ -932,6 +1197,16 @@ watch(
       @update:selected="srid = $event"
       @confirm="confirmSridSelection"
       @cancel="resetViewer"
+    />
+
+    <LargeDatasetModal
+      v-if="largeModalVisible"
+      :reason="largeModalReason"
+      :file-bytes="largeDataset.fileBytes"
+      :feature-count="largeDataset.featureCount"
+      :parse-mode="parseMode"
+      @close="closeLargeModal"
+      @select="handleLargeModalSelect"
     />
   </div>
 </template>

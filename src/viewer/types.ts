@@ -69,6 +69,8 @@ export type FeatureGeometry = Feature<Geometry>;
 
 export type EncodingOption = "utf-8" | "cp949" | "euc-kr";
 
+export type ParseMode = "full" | "quick";
+
 export type VisualizationColorMode = "default" | "category" | "continuous";
 export type VisualizationNumericScale = "quantile" | "equal";
 
@@ -105,4 +107,16 @@ export type VisualizationConfig = VisualizationSettings & {
   numericStops: NumericStop[];
   numericDomain: [number, number] | null;
   pointSizeStops: SizeStop[] | null;
+};
+
+export type ParseProgress = {
+  label: string;
+  percent: number;
+};
+
+export type LargeDatasetState = {
+  fileBytes: number;
+  featureCount: number;
+  isLargeFile: boolean;
+  isLargeFeature: boolean;
 };
