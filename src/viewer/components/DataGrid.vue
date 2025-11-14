@@ -226,6 +226,14 @@ watch(
         >
           CP949
         </button>
+        <button
+          type="button"
+          class="toggle"
+          :class="{ 'toggle--active': props.encoding === 'euc-kr' }"
+          @click="setEncoding('euc-kr')"
+        >
+          EUC-KR
+        </button>
       </div>
     </div>
 

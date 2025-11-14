@@ -67,4 +67,4 @@ export type ZipInspection = {
 export type FeatureCollectionGeometry = FeatureCollection<Geometry>;
 export type FeatureGeometry = Feature<Geometry>;
 
-export type EncodingOption = "utf-8" | "cp949";
+export type EncodingOption = "utf-8" | "cp949" | "euc-kr";

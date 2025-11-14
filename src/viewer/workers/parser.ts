@@ -188,6 +188,8 @@ const collectEntries = async (buffer: ArrayBuffer): Promise<Record<string, Layer
 
 const mapEncoding = (encoding: EncodingOption): string => {
   switch (encoding) {
+    case "euc-kr":
+      return "euc-kr";
     case "cp949":
       return "cp949";
     default:

@@ -565,12 +565,24 @@ const readEntryAsText = async (entry: {
 };
 
 const parseEncodingLabel = (label: string): EncodingOption | undefined => {
-  const normalized = label.toLowerCase();
-  if (normalized.includes("949") || normalized.includes("ksc") || normalized.includes("euc-kr")) {
-    return "cp949";
-  }
+  const normalized = label.trim().toLowerCase();
   if (normalized.includes("utf-8") || normalized.includes("utf8")) {
     return "utf-8";
+  }
+  if (
+    normalized.includes("euc-kr") ||
+    normalized.includes("euckr") ||
+    normalized.includes("ksc") ||
+    normalized.includes("5601")
+  ) {
+    return "euc-kr";
+  }
+  if (
+    normalized.includes("949") ||
+    normalized.includes("ms949") ||
+    normalized.includes("uhc")
+  ) {
+    return "cp949";
   }
   return undefined;
 };
