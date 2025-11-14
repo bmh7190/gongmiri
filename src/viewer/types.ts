@@ -68,3 +68,41 @@ export type FeatureCollectionGeometry = FeatureCollection<Geometry>;
 export type FeatureGeometry = Feature<Geometry>;
 
 export type EncodingOption = "utf-8" | "cp949" | "euc-kr";
+
+export type VisualizationColorMode = "default" | "category" | "continuous";
+export type VisualizationNumericScale = "quantile" | "equal";
+
+export type CategoryStop = {
+  value: string;
+  color: string;
+  count: number;
+  ratio: number;
+  isOther?: boolean;
+};
+
+export type NumericStop = {
+  value: number;
+  color: string;
+};
+
+export type SizeStop = {
+  value: number;
+  radius: number;
+};
+
+export type VisualizationSettings = {
+  colorMode: VisualizationColorMode;
+  categoryField: string | null;
+  numericField: string | null;
+  numericScale: VisualizationNumericScale;
+  pointSizeField: string | null;
+  pointSizeRange: [number, number];
+  cluster: boolean;
+};
+
+export type VisualizationConfig = VisualizationSettings & {
+  categoryStops: CategoryStop[];
+  numericStops: NumericStop[];
+  numericDomain: [number, number] | null;
+  pointSizeStops: SizeStop[] | null;
+};
