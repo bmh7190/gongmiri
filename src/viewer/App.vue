@@ -7,6 +7,7 @@ import ResultPanel from "./components/ResultPanel.vue";
 import SridModal from "./components/SridModal.vue";
 import MapPanel from "./components/MapPanel.vue";
 import DataGrid from "./components/DataGrid.vue";
+import VisualizationPanel from "./components/VisualizationPanel.vue";
 import {
   type FeatureCollectionGeometry,
   type FeatureGeometry,
@@ -17,11 +18,20 @@ import {
   type EncodingOption,
   type SridCode,
   type FeatureId,
+  type VisualizationSettings,
+  type VisualizationConfig,
 } from "./types";
 import "./viewer.css";
 import { detectSridFromPrj } from "./utils/srid";
 import type { FeatureCollection } from "geojson";
 import { logDebug, logWarn } from "./utils/logger";
+import {
+  buildCategoryStops,
+  buildNumericStops,
+  buildPointSizeStops,
+  DEFAULT_POINT_SIZE_RANGE,
+  normalizeSizeRange,
+} from "./utils/visualization";
 
 const isDragging = ref(false);
 const isLoading = ref(false);
@@ -39,6 +49,160 @@ const currentCollection = shallowRef<FeatureCollectionGeometry | null>(null);
 const sridModalVisible = ref(false);
 const selectedFeatureId = ref<FeatureId | null>(null);
 const hasFileLoaded = computed(() => Boolean(sourceBuffer.value));
+
+const createDefaultVisualization = (): VisualizationSettings => ({
+  colorMode: "default",
+  categoryField: null,
+  numericField: null,
+  numericScale: "quantile",
+  pointSizeField: null,
+  pointSizeRange: DEFAULT_POINT_SIZE_RANGE,
+  cluster: false,
+});
+
+const visualizationSettings = ref<VisualizationSettings>(createDefaultVisualization());
+
+const visualizationConfig = computed<VisualizationConfig>(() => {
+  const settings = visualizationSettings.value;
+  const collection = currentCollection.value;
+  const categoryStops =
+    settings.colorMode === "category" &&
+    collection &&
+    settings.categoryField
+      ? buildCategoryStops(collection, settings.categoryField)
+      : [];
+  const numericResult =
+    settings.colorMode === "continuous" &&
+    collection &&
+    settings.numericField
+      ? buildNumericStops(collection, settings.numericField, settings.numericScale)
+      : { stops: [], domain: null };
+  const pointSizeStops =
+    collection && settings.pointSizeField
+      ? buildPointSizeStops(
+          collection,
+          settings.pointSizeField,
+          settings.pointSizeRange,
+        )
+      : null;
+
+  return {
+    ...settings,
+    categoryStops,
+    numericStops: numericResult.stops,
+    numericDomain: numericResult.domain,
+    pointSizeStops,
+  };
+});
+
+const hasPointGeometry = computed(() =>
+  currentCollection.value?.features?.some((feature) => {
+    const type = feature.geometry?.type;
+    return type === "Point" || type === "MultiPoint";
+  }) ?? false,
+);
+
+const categoryLegend = computed(() => visualizationConfig.value.categoryStops);
+
+const numberFormatter = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 2,
+});
+
+const formatLegendValue = (value: number): string => numberFormatter.format(value);
+
+const numericLegend = computed(() => {
+  const { numericStops, numericDomain } = visualizationConfig.value;
+  if (!numericDomain || !numericStops.length) return [];
+  if (numericStops.length === 1) {
+    return [
+      {
+        color: numericStops[0]!.color,
+        label: `= ${formatLegendValue(numericStops[0]!.value)}`,
+      },
+    ];
+  }
+  return numericStops.map((stop, index) => {
+    const next = numericStops[index + 1];
+    if (index === 0 && next) {
+      return {
+        color: stop.color,
+        label: `≤ ${formatLegendValue(next.value)}`,
+      };
+    }
+    if (!next) {
+      return {
+        color: stop.color,
+        label: `≥ ${formatLegendValue(stop.value)}`,
+      };
+    }
+    return {
+      color: stop.color,
+      label: `${formatLegendValue(stop.value)} – ${formatLegendValue(next.value)}`,
+    };
+  });
+});
+
+const sizeLegend = computed(() => {
+  const stops = visualizationConfig.value.pointSizeStops;
+  if (!stops || !stops.length || !visualizationConfig.value.pointSizeField) {
+    return null;
+  }
+  const first = stops[0]!;
+  const last = stops[stops.length - 1]!;
+  return {
+    field: visualizationConfig.value.pointSizeField,
+    min: first,
+    max: last,
+  };
+});
+
+const updateVisualization = (partial: Partial<VisualizationSettings>) => {
+  const next: VisualizationSettings = {
+    ...visualizationSettings.value,
+    ...partial,
+  };
+  if (partial.pointSizeRange) {
+    next.pointSizeRange = normalizeSizeRange(partial.pointSizeRange);
+  }
+  visualizationSettings.value = next;
+};
+
+const sanitizeVisualizationSelections = () => {
+  const columns = result.value?.columns ?? [];
+  const columnNames = new Set(columns.map((column) => column.name));
+  const next: VisualizationSettings = { ...visualizationSettings.value };
+  let changed = false;
+
+  if (next.categoryField && !columnNames.has(next.categoryField)) {
+    next.categoryField = null;
+    if (next.colorMode === "category") {
+      next.colorMode = "default";
+    }
+    changed = true;
+  }
+
+  if (next.numericField && !columnNames.has(next.numericField)) {
+    next.numericField = null;
+    if (next.colorMode === "continuous") {
+      next.colorMode = "default";
+    }
+    changed = true;
+  }
+
+  if (next.pointSizeField && !columnNames.has(next.pointSizeField)) {
+    next.pointSizeField = null;
+    changed = true;
+  }
+
+  if (next.cluster && !hasPointGeometry.value) {
+    next.cluster = false;
+    changed = true;
+  }
+
+  if (changed) {
+    visualizationSettings.value = next;
+  }
+};
 
 let parseRunId = 0;
 
@@ -120,6 +284,7 @@ const resetViewer = () => {
   hasParsedOnce.value = false;
   sridModalVisible.value = false;
   selectedFeatureId.value = null;
+  visualizationSettings.value = createDefaultVisualization();
 };
 
 const onDrop = async (event: DragEvent) => {
@@ -651,6 +816,14 @@ const handleGridSelection = (id: FeatureId) => {
 const handleFeatureFocusFromMap = (id: FeatureId | null) => {
   selectedFeatureId.value = id;
 };
+
+watch(
+  [() => result.value?.columns, () => hasPointGeometry.value],
+  () => {
+    sanitizeVisualizationSelections();
+  },
+  { deep: true },
+);
 </script>
 
 <template>
@@ -699,9 +872,21 @@ const handleFeatureFocusFromMap = (id: FeatureId | null) => {
           :has-prj="zipInspection?.hasPrj ?? false"
           :prj-text="prjSummary"
           :selected-feature-id="selectedFeatureId"
+          :visualization="visualizationConfig"
           @update:srid="handleSridUpdate"
           @use-file-projection="resetToFileProjection"
           @feature-focus="handleFeatureFocusFromMap"
+        />
+
+        <VisualizationPanel
+          v-if="currentCollection && result"
+          :columns="result.columns"
+          :visualization="visualizationSettings"
+          :category-legend="categoryLegend"
+          :numeric-legend="numericLegend"
+          :size-legend="sizeLegend"
+          :has-points="hasPointGeometry"
+          @update-visualization="updateVisualization"
         />
 
         <ResultPanel

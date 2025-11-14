@@ -7,11 +7,18 @@ import type {
   MapLayerMouseEvent,
   MapGeoJSONFeature,
 } from "maplibre-gl";
-import type { FeatureCollectionGeometry, FeatureGeometry, FeatureId, SridCode } from "../types";
+import type {
+  FeatureCollectionGeometry,
+  FeatureGeometry,
+  FeatureId,
+  SridCode,
+  VisualizationConfig,
+} from "../types";
 import type { Geometry, Position } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import SridSelector from "./SridSelector.vue";
 import { logDebug } from "../utils/logger";
+import { CATEGORY_OTHER_COLOR, extractPointCollection } from "../utils/visualization";
 
 const props = defineProps<{
   collection: FeatureCollectionGeometry | null;
@@ -21,6 +28,7 @@ const props = defineProps<{
   hasPrj: boolean;
   prjText?: string | null;
   selectedFeatureId: FeatureId | null;
+  visualization: VisualizationConfig;
 }>();
 
 const emit = defineEmits<{
@@ -34,9 +42,20 @@ const POINT_LAYER_ID = "gongmiri-points";
 const LINE_LAYER_ID = "gongmiri-lines";
 const POLYGON_FILL_LAYER_ID = "gongmiri-polygons";
 const POLYGON_OUTLINE_LAYER_ID = "gongmiri-polygon-outline";
+const CLUSTER_SOURCE_ID = "gongmiri-cluster-source";
+const CLUSTER_LAYER_ID = "gongmiri-cluster-layer";
+const CLUSTER_COUNT_LAYER_ID = "gongmiri-cluster-count";
+const CLUSTER_POINT_LAYER_ID = "gongmiri-cluster-points";
 const DEFAULT_CENTER: LngLatLike = [127.0276, 37.4979];
 const DEFAULT_ZOOM = 5;
 const MAP_STYLE_URL = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const DEFAULT_COLORS = {
+  polygonFill: "#0ea5e9",
+  polygonOutline: "#0284c7",
+  line: "#f97316",
+  point: "#22c55e",
+};
+const DEFAULT_POINT_RADIUS = 4;
 
 const EMPTY_COLLECTION: FeatureCollectionGeometry = {
   type: "FeatureCollection",
@@ -84,6 +103,14 @@ const initMap = () => {
       type: "geojson",
       data: EMPTY_COLLECTION,
       promoteId: "id",
+    });
+    map.addSource(CLUSTER_SOURCE_ID, {
+      type: "geojson",
+      data: EMPTY_COLLECTION,
+      promoteId: "id",
+      cluster: true,
+      clusterMaxZoom: 11,
+      clusterRadius: 50,
     });
     addLayers(map);
     registerInteractions(map);
@@ -194,6 +221,81 @@ const addLayers = (map: MapHandle) => {
     },
     filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
   });
+
+  map.addLayer({
+    id: CLUSTER_LAYER_ID,
+    type: "circle",
+    source: CLUSTER_SOURCE_ID,
+    filter: ["has", "point_count"],
+    layout: { visibility: "none" },
+    paint: {
+      "circle-color": [
+        "step",
+        ["get", "point_count"],
+        "#60a5fa",
+        50,
+        "#2563eb",
+        200,
+        "#1d4ed8",
+      ],
+      "circle-radius": [
+        "step",
+        ["get", "point_count"],
+        16,
+        50,
+        22,
+        200,
+        28,
+      ],
+      "circle-stroke-width": 1,
+      "circle-stroke-color": "#1e3a8a",
+    },
+  });
+
+  map.addLayer({
+    id: CLUSTER_COUNT_LAYER_ID,
+    type: "symbol",
+    source: CLUSTER_SOURCE_ID,
+    filter: ["has", "point_count"],
+    layout: {
+      "text-field": ["get", "point_count_abbreviated"],
+      "text-font": ["Noto Sans Regular", "Arial Unicode MS Regular"],
+      "text-size": 12,
+      "visibility": "none",
+    },
+    paint: {
+      "text-color": "#f8fafc",
+    },
+  });
+
+  map.addLayer({
+    id: CLUSTER_POINT_LAYER_ID,
+    type: "circle",
+    source: CLUSTER_SOURCE_ID,
+    filter: ["!", ["has", "point_count"]],
+    layout: { visibility: "none" },
+    paint: {
+      "circle-radius": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        6,
+        4,
+      ],
+      "circle-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        "#facc15",
+        "#22c55e",
+      ],
+      "circle-stroke-width": 1,
+      "circle-stroke-color": [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        "#92400e",
+        "#065f46",
+      ],
+    },
+  });
 };
 
 const registerInteractions = (map: MapHandle) => {
@@ -217,6 +319,7 @@ const registerInteractions = (map: MapHandle) => {
     LINE_LAYER_ID,
     POLYGON_FILL_LAYER_ID,
     POLYGON_OUTLINE_LAYER_ID,
+    CLUSTER_POINT_LAYER_ID,
   ];
 
   for (const layerId of interactiveLayers) {
@@ -224,6 +327,32 @@ const registerInteractions = (map: MapHandle) => {
     map.on("mouseenter", layerId, () => hoverCursor(true));
     map.on("mouseleave", layerId, () => hoverCursor(false));
   }
+
+  const handleClusterClick = (event: MapLayerMouseEvent) => {
+    const feature = event.features?.[0];
+    if (!feature?.properties) return;
+    const clusterId = feature.properties.cluster_id;
+    if (typeof clusterId !== "number") return;
+    const source = map.getSource(CLUSTER_SOURCE_ID) as (GeoJSONSource & {
+      getClusterExpansionZoom?: (
+        id: number,
+        callback: (error?: Error | null, zoom?: number) => void,
+      ) => void;
+    }) | null;
+    if (!source?.getClusterExpansionZoom) return;
+    source.getClusterExpansionZoom(clusterId, (error?: Error | null, zoom?: number) => {
+      if (error || zoom === undefined) return;
+      map.easeTo({
+        center: event.lngLat,
+        zoom,
+        duration: 500,
+      });
+    });
+  };
+
+  map.on("click", CLUSTER_LAYER_ID, handleClusterClick);
+  map.on("mouseenter", CLUSTER_LAYER_ID, () => hoverCursor(true));
+  map.on("mouseleave", CLUSTER_LAYER_ID, () => hoverCursor(false));
 };
 
 const focusOnFeature = (event: MapLayerMouseEvent) => {
@@ -288,6 +417,13 @@ const syncCollection = () => {
   if (!source) return;
   const data = (props.collection ? toRaw(props.collection) : EMPTY_COLLECTION) as FeatureCollectionGeometry;
   source.setData(data);
+  const clusterSource = map.getSource(CLUSTER_SOURCE_ID) as GeoJSONSource | undefined;
+  if (clusterSource) {
+    const pointCollection = extractPointCollection(
+      (props.collection ? toRaw(props.collection) : EMPTY_COLLECTION) as FeatureCollectionGeometry,
+    );
+    clusterSource.setData(pointCollection);
+  }
   logDebug("mapPanel:data", {
     features: data.features?.length ?? 0,
     sridMode: props.sridMode,
@@ -300,6 +436,7 @@ const syncCollection = () => {
     resetView();
   }
   applyFeatureState(props.selectedFeatureId ?? null);
+  applyVisualization();
 };
 
 const updateLayerVisibility = (collection: FeatureCollectionGeometry) => {
@@ -317,6 +454,175 @@ const toggleLayer = (layerId: string, visible: boolean) => {
   map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
 };
 
+const setPaintPropertySafe = (layerId: string, property: string, value: unknown) => {
+  const map = mapInstance.value;
+  if (!map?.getLayer(layerId)) return;
+  map.setPaintProperty(layerId, property, value);
+};
+
+const withSelection = (
+  highlightColor: string,
+  base: maplibregl.ExpressionSpecification | string,
+): maplibregl.ExpressionSpecification => [
+  "case",
+  ["boolean", ["feature-state", "selected"], false],
+  highlightColor,
+  base,
+];
+
+const applyVisualization = () => {
+  if (!isMapReady.value) return;
+  applyColorVisualization();
+  applyPointSizeVisualization();
+  applyClusterVisibility();
+};
+
+const applyColorVisualization = () => {
+  const fillColor = buildColorExpression(DEFAULT_COLORS.polygonFill);
+  const outlineColor = buildColorExpression(DEFAULT_COLORS.polygonOutline);
+  const lineColor = buildColorExpression(DEFAULT_COLORS.line);
+  const pointColor = buildColorExpression(DEFAULT_COLORS.point);
+
+  setPaintPropertySafe(
+    POLYGON_FILL_LAYER_ID,
+    "fill-color",
+    withSelection("#fbbf24", fillColor),
+  );
+  setPaintPropertySafe(
+    POLYGON_OUTLINE_LAYER_ID,
+    "line-color",
+    withSelection("#f59e0b", outlineColor),
+  );
+  setPaintPropertySafe(
+    LINE_LAYER_ID,
+    "line-color",
+    withSelection("#f59e0b", lineColor),
+  );
+  setPaintPropertySafe(
+    POINT_LAYER_ID,
+    "circle-color",
+    withSelection("#facc15", pointColor),
+  );
+  setPaintPropertySafe(
+    CLUSTER_POINT_LAYER_ID,
+    "circle-color",
+    withSelection("#facc15", pointColor),
+  );
+};
+
+const buildColorExpression = (
+  fallback: string,
+): maplibregl.ExpressionSpecification | string => {
+  const visualization = props.visualization;
+  if (
+    visualization.colorMode === "category" &&
+    visualization.categoryField &&
+    visualization.categoryStops.length
+  ) {
+    return buildCategoryExpression(
+      visualization.categoryField,
+      visualization.categoryStops,
+      fallback,
+    );
+  }
+  if (
+    visualization.colorMode === "continuous" &&
+    visualization.numericField &&
+    visualization.numericStops.length
+  ) {
+    return buildContinuousExpression(
+      visualization.numericField,
+      visualization.numericStops,
+      visualization.numericDomain,
+      fallback,
+    );
+  }
+  return fallback;
+};
+
+const buildCategoryExpression = (
+  field: string,
+  stops: VisualizationConfig["categoryStops"],
+  fallback: string,
+): maplibregl.ExpressionSpecification | string => {
+  const entries = stops.filter((stop) => !stop.isOther);
+  if (!entries.length) return fallback;
+  const otherColor =
+    stops.find((stop) => stop.isOther)?.color ?? CATEGORY_OTHER_COLOR;
+  const expression: Array<string | maplibregl.ExpressionSpecification> = [
+    "match",
+    ["to-string", ["coalesce", ["get", field], ""]],
+  ];
+  for (const stop of entries) {
+    expression.push(stop.value, stop.color);
+  }
+  expression.push(otherColor);
+  return expression as maplibregl.ExpressionSpecification;
+};
+
+const buildContinuousExpression = (
+  field: string,
+  stops: VisualizationConfig["numericStops"],
+  domain: [number, number] | null,
+  fallback: string,
+): maplibregl.ExpressionSpecification | string => {
+  if (stops.length === 1) {
+    return stops[0]!.color;
+  }
+  if (!domain) return fallback;
+  const interpolate: maplibregl.ExpressionSpecification = [
+    "interpolate",
+    ["linear"],
+    ["coalesce", ["to-number", ["get", field]], domain[0]!],
+    ...stops.flatMap((stop) => [stop.value, stop.color]),
+  ];
+  return [
+    "case",
+    ["has", field],
+    interpolate,
+    fallback,
+  ];
+};
+
+const applyPointSizeVisualization = () => {
+  const radiusExpression = buildRadiusExpression();
+  setPaintPropertySafe(POINT_LAYER_ID, "circle-radius", radiusExpression);
+  setPaintPropertySafe(CLUSTER_POINT_LAYER_ID, "circle-radius", radiusExpression);
+};
+
+const buildRadiusExpression = (): maplibregl.ExpressionSpecification => {
+  const stops = props.visualization.pointSizeStops;
+  const field = props.visualization.pointSizeField;
+  if (!stops || !field || stops.length < 2) {
+    return [
+      "case",
+      ["boolean", ["feature-state", "selected"], false],
+      DEFAULT_POINT_RADIUS + 2,
+      DEFAULT_POINT_RADIUS,
+    ];
+  }
+  const interpolate: maplibregl.ExpressionSpecification = [
+    "interpolate",
+    ["linear"],
+    ["coalesce", ["to-number", ["get", field]], stops[0]!.value],
+    ...stops.flatMap((stop) => [stop.value, stop.radius]),
+  ];
+  return [
+    "case",
+    ["boolean", ["feature-state", "selected"], false],
+    ["+", interpolate, 2],
+    interpolate,
+  ];
+};
+
+const applyClusterVisibility = () => {
+  const enabled = props.visualization.cluster;
+  toggleLayer(POINT_LAYER_ID, !enabled);
+  toggleLayer(CLUSTER_LAYER_ID, enabled);
+  toggleLayer(CLUSTER_COUNT_LAYER_ID, enabled);
+  toggleLayer(CLUSTER_POINT_LAYER_ID, enabled);
+};
+
 const toggleSridPanel = () => {
   showSridPanel.value = !showSridPanel.value;
 };
@@ -330,28 +636,37 @@ const handleUseFileProjection = () => {
 };
 
 const applyFeatureState = (featureId: FeatureId | null) => {
+  updateSourceSelection(SOURCE_ID, activeFeatureId.value, featureId);
+  updateSourceSelection(CLUSTER_SOURCE_ID, activeFeatureId.value, featureId);
+  activeFeatureId.value = featureId;
+};
+
+const updateSourceSelection = (
+  sourceId: string,
+  previous: FeatureId | null,
+  next: FeatureId | null,
+) => {
   if (!mapInstance.value) return;
-  if (activeFeatureId.value) {
+  if (previous) {
     try {
       mapInstance.value.setFeatureState(
-        { source: SOURCE_ID, id: activeFeatureId.value },
+        { source: sourceId, id: previous },
         { selected: false },
       );
     } catch (error) {
       logDebug("mapPanel:clear-state", error);
     }
   }
-  if (featureId) {
+  if (next) {
     try {
       mapInstance.value.setFeatureState(
-        { source: SOURCE_ID, id: featureId },
+        { source: sourceId, id: next },
         { selected: true },
       );
     } catch (error) {
       logDebug("mapPanel:set-state", error);
     }
   }
-  activeFeatureId.value = featureId;
 };
 
 const focusFeatureById = (featureId: FeatureId | null) => {
@@ -516,6 +831,14 @@ onMounted(() => {
 onBeforeUnmount(() => {
   destroyMap();
 });
+
+watch(
+  () => props.visualization,
+  () => {
+    applyVisualization();
+  },
+  { deep: true },
+);
 
 watch(
   () => props.collection,
