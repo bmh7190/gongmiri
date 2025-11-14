@@ -31,6 +31,13 @@ type ParseError = {
   message: string;
 };
 
+type ParseProgressMessage = {
+  id: number;
+  status: "progress";
+  label: string;
+  percent: number;
+};
+
 type LayerEntry = {
   shp?: ArrayBuffer;
   dbf?: ArrayBuffer;
@@ -69,8 +76,18 @@ self.addEventListener("message", async (event: MessageEvent<ParseRequest>) => {
     srid,
     bufferBytes: buffer.byteLength,
   });
+  const reportProgress = (label: string, percent: number) => {
+    const response: ParseProgressMessage = {
+      id,
+      status: "progress",
+      label,
+      percent: clampPercent(percent),
+    };
+    postMessage(response);
+  };
   try {
-    const result = await parseArchive(buffer, encoding, srid);
+    reportProgress("ZIP 해제 중", 5);
+    const result = await parseArchive(buffer, encoding, srid, reportProgress);
     const collection = normalizeCollection(result);
     logDebug("[worker] parse success", {
       id,
@@ -96,8 +113,10 @@ const parseArchive = async (
   buffer: ArrayBuffer,
   encoding: EncodingOption,
   srid: SridCode | null,
+  reportProgress: (label: string, percent: number) => void = () => {},
 ): Promise<FeatureCollection | FeatureCollection[]> => {
   const entries = await collectEntries(buffer);
+  reportProgress("레이어 구성 중", 12);
   const layers = Object.values(entries).filter((layer) => layer.shp);
   if (!layers.length) {
     throw new Error("SHP 레이어를 찾지 못했습니다.");
@@ -112,7 +131,15 @@ const parseArchive = async (
   });
 
   const collections: FeatureCollection[] = [];
-  for (const layer of layers) {
+  const progressBase = 20;
+  const progressSpan = 65;
+  const perLayer = layers.length ? progressSpan / layers.length : progressSpan;
+  for (let index = 0; index < layers.length; index += 1) {
+    const layer = layers[index]!;
+    reportProgress(
+      `레이어 ${index + 1}/${layers.length} 파싱 중`,
+      progressBase + perLayer * index,
+    );
     const prjText = projOverride ?? layer.prj;
     const encodingLabel = layer.cpg?.trim() || mapEncoding(encoding);
     const shpBuffer = layer.shp;
@@ -138,8 +165,13 @@ const parseArchive = async (
       hasPrj: Boolean(layer.prj),
     });
     collections.push(collection);
+    reportProgress(
+      `레이어 ${index + 1}/${layers.length} 완료`,
+      progressBase + perLayer * (index + 1),
+    );
   }
 
+  reportProgress("GeoJSON 정리 중", 90);
   return collections.length === 1 ? collections[0]! : collections;
 };
 
@@ -196,6 +228,9 @@ const mapEncoding = (encoding: EncodingOption): string => {
       return "utf-8";
   }
 };
+
+const clampPercent = (value: number): number =>
+  Math.min(99, Math.max(1, Math.round(value)));
 
 type TransformFn = (position: Position) => Position;
 
