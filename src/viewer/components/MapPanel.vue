@@ -920,3 +920,148 @@ watch(
     </div>
   </section>
 </template>
+
+<style scoped>
+.map-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+}
+
+.map-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.map-panel__header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.map-panel__header small {
+  color: #6b7280;
+}
+
+.map-panel__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.map-panel__srid-pill {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #374151;
+  background: #f3f4f6;
+}
+
+.map-panel__srid-toggle {
+  border: none;
+  background: #111827;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.map-panel__srid-toggle:hover {
+  background: #1f2937;
+}
+
+.map-panel__srid-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.srid-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.srid-panel__toggle {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.srid-panel__prj {
+  margin-top: 8px;
+  padding: 8px;
+  background: #1f2937;
+  color: #f3f4f6;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 8px;
+  max-height: 140px;
+  overflow: auto;
+}
+
+.map-panel__canvas {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 320px;
+  background: #e5e7eb;
+}
+
+.map-panel__map {
+  width: 100%;
+  height: 360px;
+}
+
+.map-panel__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.82);
+  color: #6b7280;
+  font-size: 14px;
+  text-align: center;
+  padding: 16px;
+}
+
+.map-popup {
+  font-size: 12px;
+  min-width: 180px;
+}
+
+.map-popup h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #111827;
+}
+
+.popup-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.popup-row strong {
+  color: #1f2937;
+}
+
+.popup-row span {
+  color: #4b5563;
+  text-align: right;
+}
+</style>

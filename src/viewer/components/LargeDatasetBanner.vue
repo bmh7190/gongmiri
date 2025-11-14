@@ -112,3 +112,72 @@ const handleSelect = (mode: ParseMode) => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.large-banner {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fef9c3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.large-banner__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.large-banner__badge {
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #111827;
+}
+
+.large-banner h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.large-banner p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.large-banner__hint {
+  display: block;
+  font-size: 11px;
+  color: #52525b;
+  margin-top: 4px;
+}
+
+.large-banner__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-button {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+  color: #111827;
+}
+
+.mode-button--active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+</style>
