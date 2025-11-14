@@ -75,3 +75,79 @@ const densityColumns = computed(() => props.result.columns);
     </div>
   </section>
 </template>
+
+<style scoped>
+.result-panel {
+  flex: 1;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
+}
+
+.density-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.density-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.density-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #111827;
+}
+
+.density-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.density-bar__fill {
+  height: 100%;
+  background: #0ea5e9;
+  border-radius: inherit;
+}
+
+.density-bar__fill--low {
+  background: #f43f5e;
+}
+
+.density-bar__fill--medium {
+  background: #f59e0b;
+}
+
+.density-meta {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.density-meta--top {
+  font-weight: 600;
+}
+
+.density-stats {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #4b5563;
+}
+</style>

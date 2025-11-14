@@ -310,3 +310,116 @@ watch(
     </p>
   </section>
 </template>
+
+<style scoped>
+.data-grid {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+}
+
+.data-grid__header-row,
+.data-grid__row {
+  display: grid;
+  grid-template-columns: minmax(48px, 0.12fr) repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.data-grid__header-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-bottom: 6px;
+}
+
+.data-grid__header-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.data-grid__header-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.data-grid__cell {
+  font-size: 12px;
+  color: #1f2937;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.data-grid__cell--head {
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.data-grid__cell--id {
+  text-align: center;
+}
+
+.data-grid__viewport {
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  max-height: 420px;
+}
+
+.data-grid__spacer {
+  position: relative;
+}
+
+.data-grid__virtual {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.data-grid__row {
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f3f4f6;
+  text-align: left;
+}
+
+.data-grid__row:last-child {
+  border-bottom: none;
+}
+
+.data-grid__row:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.data-grid__row--selected {
+  background: rgba(14, 165, 233, 0.15);
+  border-left: 3px solid #0ea5e9;
+}
+
+.data-grid--empty {
+  align-items: flex-start;
+}
+
+.data-grid__placeholder {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.encoding-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.encoding-controls small {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+}
+</style>

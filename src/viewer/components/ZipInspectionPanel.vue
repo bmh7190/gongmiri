@@ -64,3 +64,83 @@ const essentialChips = computed<ChipStatus[]>(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.inspection-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.inspection-panel--compact {
+  max-height: none;
+  gap: 8px;
+}
+
+.chip-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip-row--solid {
+  background: #f9fafb;
+  border-radius: 999px;
+  padding: 6px 10px;
+  gap: 8px;
+}
+
+.chip {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  color: #4b5563;
+}
+
+.chip--pill {
+  min-width: 48px;
+  text-align: center;
+}
+
+.chip-row--solid .chip {
+  border-color: transparent;
+  min-width: 48px;
+  text-align: center;
+}
+
+.chip--ok {
+  background: #ecfdf5;
+  border-color: #34d399;
+  color: #047857;
+}
+
+.chip--warn {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.chip--muted {
+  opacity: 0.5;
+}
+
+.dataset-meta {
+  display: flex;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.dataset-meta .value {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #111827;
+  word-break: break-all;
+}
+</style>

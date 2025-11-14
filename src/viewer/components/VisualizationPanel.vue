@@ -290,3 +290,148 @@ const toggleCluster = () => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.visualization-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.viz-block {
+  border: 1px solid #f3f4f6;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f9fafb;
+}
+
+.viz-block__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-block__header h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.viz-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.viz-control label {
+  font-weight: 600;
+  font-size: 12px;
+  color: #374151;
+}
+
+.viz-control select,
+.viz-control input[type="number"] {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.viz-control--range {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.viz-control--range label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.viz-inline-label {
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.viz-hint {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.viz-hint--warn {
+  color: #b91c1c;
+}
+
+.viz-legend {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+}
+
+.viz-legend__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.viz-legend ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.viz-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-right: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.viz-legend__label {
+  font-size: 12px;
+  color: #374151;
+}
+
+.viz-legend--size {
+  border: none;
+  padding: 0;
+}
+
+.size-legend-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.size-legend__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.size-dot {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.7);
+  border: 1px solid rgba(14, 116, 144, 0.8);
+}
+</style>
