@@ -42,6 +42,9 @@ export type ZipLayerStatus = {
   hasShx: boolean;
   hasPrj: boolean;
   hasCpg: boolean;
+  hasQix: boolean;
+  hasSbn: boolean;
+  hasSbx: boolean;
   missingEssential: string[];
 };
 

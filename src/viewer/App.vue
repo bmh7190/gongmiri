@@ -870,20 +870,23 @@ const inspectZipEntries = async (buffer: ArrayBuffer): Promise<ZipInspection> =>
 
 
   const mark = (layerName: string, ext: string) => {
-    const existing =
-      layers.get(layerName) ??
-      {
-        name: layerName,
-        hasShp: false,
-        hasDbf: false,
-        hasShx: false,
-        hasPrj: false,
-        hasCpg: false,
-        missingEssential: [],
-      };
+  const existing =
+    layers.get(layerName) ??
+    {
+      name: layerName,
+      hasShp: false,
+      hasDbf: false,
+      hasShx: false,
+      hasPrj: false,
+      hasCpg: false,
+      hasQix: false,
+      hasSbn: false,
+      hasSbx: false,
+      missingEssential: [],
+    };
 
-    switch (ext) {
-      case "shp":
+  switch (ext) {
+    case "shp":
         existing.hasShp = true;
         break;
       case "dbf":
@@ -896,20 +899,29 @@ const inspectZipEntries = async (buffer: ArrayBuffer): Promise<ZipInspection> =>
         existing.hasPrj = true;
         break;
       case "cpg":
-        existing.hasCpg = true;
-        break;
-      default:
-        break;
-    }
+      existing.hasCpg = true;
+      break;
+    case "qix":
+      existing.hasQix = true;
+      break;
+    case "sbn":
+      existing.hasSbn = true;
+      break;
+    case "sbx":
+      existing.hasSbx = true;
+      break;
+    default:
+      break;
+  }
 
-    layers.set(layerName, existing);
+  layers.set(layerName, existing);
   };
 
   for (const entry of iter(bytes)) {
     const normalized = entry.filename.replace(/\\/g, "/");
     const leaf = normalized.split("/").pop();
     if (!leaf) continue;
-    const match = leaf.match(/^(.+)\.(shp|dbf|shx|prj|cpg)$/i);
+    const match = leaf.match(/^(.+)\.(shp|dbf|shx|prj|cpg|qix|sbn|sbx)$/i);
     if (!match) continue;
     const rawName = match[1];
     const extension = match[2];
@@ -1108,7 +1120,7 @@ watch(
         />
 
         <ZipInspectionPanel
-          v-if="zipInspection"
+          v-if="zipInspection && hasFileLoaded"
           :inspection="zipInspection"
           :feature-count="result?.featureCount ?? null"
           :geometry-types="result?.geometryTypes ?? []"

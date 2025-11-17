@@ -11,32 +11,101 @@ const props = defineProps<{
 type ChipStatus = {
   label: string;
   status: "ok" | "warn" | "muted";
+  description: string;
+  missing: boolean;
 };
 
 const essentialChips = computed<ChipStatus[]>(() => {
   const layers = props.inspection.layers;
   const hasAll = (key: keyof (typeof layers)[number]) =>
     layers.length ? layers.every((layer) => layer[key]) : false;
+  const allHaveSpatialIndex = layers.length
+    ? layers.every(
+        (layer) =>
+          layer.hasQix ||
+          (layer.hasSbn && layer.hasSbx),
+      )
+    : false;
 
   return [
-    { label: ".shp", status: hasAll("hasShp") ? "ok" : "warn" },
-    { label: ".dbf", status: hasAll("hasDbf") ? "ok" : "warn" },
-    { label: ".shx", status: hasAll("hasShx") ? "ok" : "warn" },
-    { label: ".prj", status: hasAll("hasPrj") ? "ok" : "muted" },
-    { label: ".cpg", status: hasAll("hasCpg") ? "ok" : "muted" },
+    {
+      label: ".shp",
+      status: hasAll("hasShp") ? "ok" : "warn",
+      description: "지오메트리",
+      missing: !hasAll("hasShp"),
+    },
+    {
+      label: ".dbf",
+      status: hasAll("hasDbf") ? "ok" : "warn",
+      description: "속성 테이블",
+      missing: !hasAll("hasDbf"),
+    },
+    {
+      label: ".shx",
+      status: hasAll("hasShx") ? "ok" : "warn",
+      description: "레코드 인덱스",
+      missing: !hasAll("hasShx"),
+    },
+    {
+      label: ".prj",
+      status: hasAll("hasPrj") ? "ok" : "muted",
+      description: "좌표계",
+      missing: !hasAll("hasPrj"),
+    },
+    {
+      label: ".cpg",
+      status: hasAll("hasCpg") ? "ok" : "muted",
+      description: "인코딩",
+      missing: !hasAll("hasCpg"),
+    },
+    {
+      label: ".qix/.sbn",
+      status: allHaveSpatialIndex ? "ok" : "muted",
+      description: "공간 인덱스",
+      missing: !allHaveSpatialIndex,
+    },
   ];
+});
+
+const featureCountLabel = computed(() => {
+  if (props.featureCount === null) return "집계 중";
+  return props.featureCount.toLocaleString();
+});
+
+const geometryBadges = computed(() => {
+  if (!props.geometryTypes.length) return ["지오메트리 없음"];
+  return props.geometryTypes;
 });
 </script>
 
 <template>
-  <section class="inspection-panel inspection-panel--compact">
-    <div class="columns-header">
+  <section class="inspection-panel">
+    <header class="inspection-panel__header">
       <h3>데이터 구성 요약</h3>
-      <small>필수 · 참고 확장자 상태</small>
+    </header>
+
+    <div class="dataset-summary">
+      <article class="summary-card">
+        <p class="summary-label">피처 수</p>
+        <strong class="summary-value">{{ featureCountLabel }}</strong>
+      </article>
+
+      <article class="summary-card">
+        <p class="summary-label">감지된 타입</p>
+        <div class="geometry-badges">
+          <span
+            v-for="type in geometryBadges"
+            :key="type"
+            class="geometry-chip"
+          >
+            {{ type }}
+          </span>
+        </div>
+      </article>
     </div>
 
     <div class="chip-row chip-row--solid">
-      <span
+      <div
         v-for="chip in essentialChips"
         :key="chip.label"
         class="chip chip--pill"
@@ -46,20 +115,11 @@ const essentialChips = computed<ChipStatus[]>(() => {
           'chip--muted': chip.status === 'muted'
         }"
       >
-        {{ chip.label }}
-      </span>
-    </div>
-
-    <div class="dataset-meta" v-if="featureCount !== null">
-      <div>
-        <p class="label">피처 수</p>
-        <strong class="value">{{ featureCount }}</strong>
-      </div>
-      <div>
-        <p class="label">지오메트리</p>
-        <strong class="value">
-          {{ geometryTypes.length ? geometryTypes.join(", ") : "없음" }}
-        </strong>
+        <div class="chip__label">
+          <span class="chip__dot" :class="{ 'chip__dot--missing': chip.missing }" />
+          {{ chip.label }}
+        </div>
+        <small>{{ chip.description }}</small>
       </div>
     </div>
   </section>
@@ -69,17 +129,84 @@ const essentialChips = computed<ChipStatus[]>(() => {
 .inspection-panel {
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 16px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 200px;
-  overflow: auto;
+  gap: 16px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }
 
-.inspection-panel--compact {
-  max-height: none;
+.inspection-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.inspection-panel__header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #111827;
+}
+
+.dataset-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-label {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.summary-value {
+  font-size: 20px;
+  color: #111827;
+}
+
+.summary-hint {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.geometry-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.geometry-chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+
+.chip-group {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+
+.chip-group__label {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .chip-row {
@@ -89,58 +216,61 @@ const essentialChips = computed<ChipStatus[]>(() => {
 }
 
 .chip-row--solid {
-  background: #f9fafb;
-  border-radius: 999px;
-  padding: 6px 10px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0;
   gap: 8px;
 }
 
 .chip {
-  border-radius: 999px;
-  padding: 2px 10px;
+  border-radius: 12px;
+  padding: 10px 12px;
   font-size: 12px;
-  border: 1px solid #d1d5db;
-  color: #4b5563;
+  border: 1px solid #e5e7eb;
+  color: #111827;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 72px;
+  background: #fff;
 }
 
 .chip--pill {
-  min-width: 48px;
-  text-align: center;
+  text-align: left;
 }
 
 .chip-row--solid .chip {
   border-color: transparent;
-  min-width: 48px;
-  text-align: center;
 }
 
 .chip--ok {
-  background: #ecfdf5;
   border-color: #34d399;
-  color: #047857;
 }
 
 .chip--warn {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  color: #b91c1c;
+  border-color: #f87171;
 }
 
 .chip--muted {
-  opacity: 0.5;
+  border-color: #d1d5db;
+  color: #6b7280;
 }
 
-.dataset-meta {
+.chip__label {
   display: flex;
-  gap: 16px;
-  padding-top: 8px;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
 }
 
-.dataset-meta .value {
-  display: block;
-  margin-top: 6px;
-  font-size: 14px;
-  color: #111827;
-  word-break: break-all;
+.chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.chip__dot--missing {
+  background: #ef4444;
 }
 </style>
