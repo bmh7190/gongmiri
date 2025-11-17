@@ -8,16 +8,22 @@ import type {
   MapGeoJSONFeature,
 } from "maplibre-gl";
 import type {
+  CategoryStop,
+  ColumnStat,
   FeatureCollectionGeometry,
   FeatureGeometry,
   FeatureId,
+  NumericLegendEntry,
   SridCode,
   VisualizationConfig,
+  VisualizationSettings,
+  SizeLegend,
 } from "../types";
 import type { Geometry, Position } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
-import SridSelector from "./SridSelector.vue";
+import VisualizationPanel from "./VisualizationPanel.vue";
 import { logDebug } from "../utils/logger";
+import { SRID_OPTIONS } from "../utils/srid";
 import { CATEGORY_OTHER_COLOR, extractPointCollection } from "../utils/visualization";
 
 const props = defineProps<{
@@ -29,12 +35,19 @@ const props = defineProps<{
   prjText?: string | null;
   selectedFeatureId: FeatureId | null;
   visualization: VisualizationConfig;
+  visualizationSettings: VisualizationSettings;
+  columns: ColumnStat[];
+  categoryLegend: CategoryStop[];
+  numericLegend: NumericLegendEntry[];
+  sizeLegend: SizeLegend;
+  hasPointGeometry: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "update:srid", value: SridCode): void;
   (e: "use-file-projection"): void;
   (e: "feature-focus", value: FeatureId | null): void;
+  (e: "update-visualization", value: Partial<VisualizationSettings>): void;
 }>();
 
 const SOURCE_ID = "gongmiri-preview-source";
@@ -71,6 +84,8 @@ const popupRef = ref<maplibregl.Popup | null>(null);
 const showSridPanel = ref(false);
 const showPrjText = ref(false);
 const activeFeatureId = ref<FeatureId | null>(null);
+const showVisualizationPanel = ref(false);
+const pointLayerAvailable = ref(false);
 
 const hasFeatures = computed(
   () => Boolean(props.collection?.features?.length),
@@ -442,10 +457,13 @@ const syncCollection = () => {
 const updateLayerVisibility = (collection: FeatureCollectionGeometry) => {
   const map = mapInstance.value;
   if (!map) return;
-  toggleLayer(POLYGON_FILL_LAYER_ID, hasGeometry(collection, ["Polygon", "MultiPolygon"]));
-  toggleLayer(POLYGON_OUTLINE_LAYER_ID, hasGeometry(collection, ["Polygon", "MultiPolygon"]));
-  toggleLayer(LINE_LAYER_ID, hasGeometry(collection, ["LineString", "MultiLineString"]));
-  toggleLayer(POINT_LAYER_ID, hasGeometry(collection, ["Point", "MultiPoint"]));
+  const polygonsVisible = hasGeometry(collection, ["Polygon", "MultiPolygon"]);
+  const linesVisible = hasGeometry(collection, ["LineString", "MultiLineString"]);
+  toggleLayer(POLYGON_FILL_LAYER_ID, polygonsVisible);
+  toggleLayer(POLYGON_OUTLINE_LAYER_ID, polygonsVisible);
+  toggleLayer(LINE_LAYER_ID, linesVisible);
+  pointLayerAvailable.value = hasGeometry(collection, ["Point", "MultiPoint"]);
+  applyClusterVisibility();
 };
 
 const toggleLayer = (layerId: string, visible: boolean) => {
@@ -616,8 +634,9 @@ const buildRadiusExpression = (): maplibregl.ExpressionSpecification => {
 };
 
 const applyClusterVisibility = () => {
-  const enabled = props.visualization.cluster;
-  toggleLayer(POINT_LAYER_ID, !enabled);
+  const canShowPoints = pointLayerAvailable.value;
+  const enabled = canShowPoints && props.visualization.cluster;
+  toggleLayer(POINT_LAYER_ID, canShowPoints && !enabled);
   toggleLayer(CLUSTER_LAYER_ID, enabled);
   toggleLayer(CLUSTER_COUNT_LAYER_ID, enabled);
   toggleLayer(CLUSTER_POINT_LAYER_ID, enabled);
@@ -633,6 +652,15 @@ const handleSridChange = (code: SridCode) => {
 
 const handleUseFileProjection = () => {
   emit("use-file-projection");
+};
+
+const toggleVisualizationOptions = () => {
+  if (!hasFeatures.value) return;
+  showVisualizationPanel.value = !showVisualizationPanel.value;
+};
+
+const handleVisualizationUpdate = (value: Partial<VisualizationSettings>) => {
+  emit("update-visualization", value);
 };
 
 const applyFeatureState = (featureId: FeatureId | null) => {
@@ -844,6 +872,9 @@ watch(
   () => props.collection,
   () => {
     syncCollection();
+    if (!hasFeatures.value) {
+      showVisualizationPanel.value = false;
+    }
   },
 );
 
@@ -857,6 +888,12 @@ watch(
     }
   },
 );
+
+watch(hasFeatures, (present) => {
+  if (!present) {
+    showVisualizationPanel.value = false;
+  }
+});
 </script>
 
 <template>
@@ -874,49 +911,89 @@ watch(
         </small>
       </div>
       <div class="map-panel__actions">
-        <span class="map-panel__srid-pill">{{ sridStatusLabel }}</span>
         <button
           type="button"
-          class="map-panel__srid-toggle"
+          class="map-panel__srid-pill"
           @click="toggleSridPanel"
         >
-          {{ showSridPanel ? "좌표계 닫기" : "좌표계 설정" }}
+          <span>{{ sridStatusLabel }}</span>
+          <span class="map-panel__srid-caret" :class="{ 'map-panel__srid-caret--open': showSridPanel }">⌄</span>
         </button>
+        <transition name="fade">
+          <div
+            v-if="showSridPanel"
+            class="map-panel__srid-dropdown"
+          >
+            <ul class="srid-dropdown__list">
+              <li
+                v-for="option in SRID_OPTIONS"
+                :key="option.code"
+              >
+                <button
+                  type="button"
+                  class="srid-option-button"
+                  :class="{ 'srid-option-button--active': props.srid === option.code }"
+                  @click="handleSridChange(option.code)"
+                >
+                  EPSG:{{ option.code }}
+                </button>
+              </li>
+            </ul>
+            <div class="srid-panel__actions">
+              <button
+                type="button"
+                class="srid-option-button srid-option-button--action"
+                :disabled="!props.hasPrj || props.sridMode === 'file'"
+                @click="handleUseFileProjection"
+              >
+                PRJ 원본 사용
+              </button>
+              <button
+                v-if="props.prjText"
+                type="button"
+                class="srid-option-button srid-option-button--action"
+                @click="showPrjText = !showPrjText"
+              >
+                {{ showPrjText ? "PRJ 숨기기" : "PRJ 전문 보기" }}
+              </button>
+            </div>
+            <pre v-if="showPrjText && props.prjText" class="srid-panel__prj">{{ props.prjText }}</pre>
+          </div>
+        </transition>
       </div>
     </div>
-    <transition name="fade">
-      <div v-if="showSridPanel" class="map-panel__srid-panel">
-        <SridSelector
-          :detected="props.detectedSrid"
-          :selected="props.srid"
-          @update:selected="handleSridChange"
-        />
-        <div class="srid-panel__actions">
-          <button
-            type="button"
-            class="reset-button reset-button--subtle"
-            :disabled="!props.hasPrj || props.sridMode === 'file'"
-            @click="handleUseFileProjection"
-          >
-            PRJ 원본 사용
-          </button>
-          <button
-            v-if="props.prjText"
-            type="button"
-            class="srid-panel__toggle"
-            @click="showPrjText = !showPrjText"
-          >
-            {{ showPrjText ? "PRJ 숨기기" : "PRJ 전문 보기" }}
-          </button>
-        </div>
-        <pre v-if="showPrjText && props.prjText" class="srid-panel__prj">{{ props.prjText }}</pre>
-      </div>
-    </transition>
     <div class="map-panel__canvas">
       <div ref="mapContainer" class="map-panel__map" />
       <div v-if="!hasFeatures" class="map-panel__empty">
         <p>표시할 피처가 없습니다.</p>
       </div>
+      <button
+        type="button"
+        class="map-panel__viz-button"
+        :class="{ 'map-panel__viz-button--open': showVisualizationPanel }"
+        :disabled="!hasFeatures"
+        @click="toggleVisualizationOptions"
+      >
+        <span>{{ showVisualizationPanel ? "시각화 닫기" : "시각화 옵션" }}</span>
+        <span class="map-panel__srid-caret" :class="{ 'map-panel__srid-caret--open': showVisualizationPanel }">⌄</span>
+      </button>
+      <transition name="slide-up">
+        <div
+          v-if="showVisualizationPanel"
+          class="map-panel__viz-overlay"
+        >
+          <VisualizationPanel
+            embedded
+            :columns="props.columns"
+            :visualization="props.visualizationSettings"
+            :category-legend="props.categoryLegend"
+            :numeric-legend="props.numericLegend"
+            :size-legend="props.sizeLegend"
+            :has-points="props.hasPointGeometry"
+            @update-visualization="handleVisualizationUpdate"
+          />
+        </div>
+      </transition>
     </div>
   </section>
 </template>
@@ -952,52 +1029,88 @@ watch(
   display: flex;
   gap: 8px;
   align-items: center;
+  position: relative;
 }
 
 .map-panel__srid-pill {
   border: 1px solid #d1d5db;
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 4px 12px;
   font-size: 12px;
-  color: #374151;
-  background: #f3f4f6;
+  color: #111827;
+  background: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.map-panel__srid-toggle {
-  border: none;
+.map-panel__srid-caret {
+  font-size: 10px;
+  color: #6b7280;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.map-panel__srid-caret--open {
+  transform: rotate(180deg);
+  color: #111827;
+}
+
+.map-panel__srid-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 180px;
+  border-radius: 12px;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+  background: #fff;
+  padding: 10px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  z-index: 15;
+}
+
+.srid-dropdown__list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.srid-option-button {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: #fff;
+  text-align: left;
+  font-size: 12px;
+  color: #111827;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.srid-option-button--active {
+  border-color: #111827;
   background: #111827;
   color: #fff;
-  padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
 }
 
-.map-panel__srid-toggle:hover {
-  background: #1f2937;
-}
-
-.map-panel__srid-panel {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 12px;
-  background: #f9fafb;
+.srid-option-button--action {
+  justify-content: center;
+  font-weight: 600;
 }
 
 .srid-panel__actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.srid-panel__toggle {
-  border: none;
-  background: transparent;
-  color: #2563eb;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 4px;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .srid-panel__prj {
@@ -1016,13 +1129,19 @@ watch(
   position: relative;
   border-radius: 12px;
   overflow: hidden;
-  min-height: 320px;
+  min-height: 360px;
   background: #e5e7eb;
 }
 
 .map-panel__map {
   width: 100%;
   height: 360px;
+  border-radius: 12px;
+}
+
+:deep(.map-panel__map .maplibregl-canvas-container) {
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .map-panel__empty {
@@ -1036,6 +1155,65 @@ watch(
   font-size: 14px;
   text-align: center;
   padding: 16px;
+}
+
+.map-panel__viz-button {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  border: none;
+  border-radius: 12px 12px 0 0;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+  z-index: 6;
+}
+
+.map-panel__viz-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.map-panel__viz-button--open {
+  border-radius: 12px 12px 0 0;
+  background: rgba(15, 23, 42, 0.98);
+}
+
+.map-panel__viz-button .map-panel__srid-caret {
+  color: #fef3c7;
+}
+
+.map-panel__viz-overlay {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 64px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  padding: 12px;
+  max-height: 75%;
+  overflow: auto;
+  z-index: 7;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(20px);
+  opacity: 0;
 }
 
 .map-popup {

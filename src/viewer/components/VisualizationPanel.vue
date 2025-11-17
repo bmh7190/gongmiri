@@ -3,7 +3,8 @@ import { computed } from "vue";
 import type {
   CategoryStop,
   ColumnStat,
-  SizeStop,
+  NumericLegendEntry,
+  SizeLegend,
   VisualizationNumericScale,
   VisualizationSettings,
 } from "../types";
@@ -12,9 +13,10 @@ const props = defineProps<{
   columns: ColumnStat[];
   visualization: VisualizationSettings;
   categoryLegend: CategoryStop[];
-  numericLegend: { color: string; label: string }[];
-  sizeLegend: { field: string; min: SizeStop; max: SizeStop } | null;
+  numericLegend: NumericLegendEntry[];
+  sizeLegend: SizeLegend;
   hasPoints: boolean;
+  embedded?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -78,10 +80,15 @@ const toggleCluster = () => {
   if (!props.hasPoints) return;
   emit("update-visualization", { cluster: !props.visualization.cluster });
 };
+
+const panelClasses = computed(() => ({
+  "visualization-panel": true,
+  "visualization-panel--embedded": props.embedded,
+}));
 </script>
 
 <template>
-  <section class="visualization-panel">
+  <section :class="panelClasses">
     <div class="columns-header">
       <h3>간단 시각화</h3>
       <small>색상, 크기, 클러스터를 빠르게 전환해 보세요.</small>
@@ -201,7 +208,14 @@ const toggleCluster = () => {
       </div>
     </div>
 
-    <div class="viz-block">
+    <p
+      v-if="!hasPoints"
+      class="viz-hint viz-hint--warn"
+    >
+      포인트 지오메트리가 없어 크기·클러스터 옵션이 숨겨졌습니다.
+    </p>
+
+    <div class="viz-block" v-if="hasPoints">
       <div class="viz-block__header">
         <h4>포인트 크기</h4>
       </div>
@@ -268,14 +282,16 @@ const toggleCluster = () => {
       </div>
     </div>
 
-    <div class="viz-block">
+    <div
+      v-if="hasPoints"
+      class="viz-block"
+    >
       <div class="viz-block__header">
         <h4>클러스터링</h4>
         <button
           type="button"
           class="toggle toggle--small"
           :class="{ 'toggle--active': visualization.cluster }"
-          :disabled="!hasPoints"
           @click="toggleCluster"
         >
           {{ visualization.cluster ? "ON" : "OFF" }}
@@ -283,9 +299,6 @@ const toggleCluster = () => {
       </div>
       <p class="viz-hint">
         포인트가 많을 때 클러스터를 켜면 줌 레벨에 따라 자동으로 집계되고 개수 라벨이 표시됩니다.
-      </p>
-      <p v-if="!hasPoints" class="viz-hint viz-hint--warn">
-        현재 데이터에는 포인트 지오메트리가 없습니다.
       </p>
     </div>
   </section>
@@ -300,6 +313,16 @@ const toggleCluster = () => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.visualization-panel--embedded {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.visualization-panel--embedded .viz-block {
+  background: #fff;
 }
 
 .viz-block {
