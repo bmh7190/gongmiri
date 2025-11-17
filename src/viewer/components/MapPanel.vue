@@ -26,6 +26,11 @@ import { logDebug } from "../utils/logger";
 import { SRID_OPTIONS } from "../utils/srid";
 import { CATEGORY_OTHER_COLOR, extractPointCollection } from "../utils/visualization";
 
+const chevronDownIcon = new URL(
+  "../../assets/icons/chevron-down.svg",
+  import.meta.url,
+).href;
+
 const props = defineProps<{
   collection: FeatureCollectionGeometry | null;
   srid: SridCode | null;
@@ -917,7 +922,14 @@ watch(hasFeatures, (present) => {
           @click="toggleSridPanel"
         >
           <span>{{ sridStatusLabel }}</span>
-          <span class="map-panel__srid-caret" :class="{ 'map-panel__srid-caret--open': showSridPanel }">⌄</span>
+          <span class="map-panel__srid-caret" :class="{ 'map-panel__srid-caret--open': showSridPanel }">
+            <img
+              class="map-panel__chevron"
+              :src="chevronDownIcon"
+              alt=""
+              aria-hidden="true"
+            />
+          </span>
         </button>
         <transition name="fade">
           <div
@@ -967,20 +979,29 @@ watch(hasFeatures, (present) => {
       <div v-if="!hasFeatures" class="map-panel__empty">
         <p>표시할 피처가 없습니다.</p>
       </div>
+    </div>
+    <div class="map-panel__viz">
       <button
         type="button"
-        class="map-panel__viz-button"
-        :class="{ 'map-panel__viz-button--open': showVisualizationPanel }"
+        class="map-panel__viz-toggle"
+        :class="{ 'map-panel__viz-toggle--open': showVisualizationPanel }"
         :disabled="!hasFeatures"
         @click="toggleVisualizationOptions"
       >
-        <span>{{ showVisualizationPanel ? "시각화 닫기" : "시각화 옵션" }}</span>
-        <span class="map-panel__srid-caret" :class="{ 'map-panel__srid-caret--open': showVisualizationPanel }">⌄</span>
+        <span>시각화 옵션</span>
+        <span class="map-panel__srid-caret" :class="{ 'map-panel__srid-caret--open': showVisualizationPanel }">
+          <img
+            class="map-panel__chevron map-panel__chevron--viz"
+            :src="chevronDownIcon"
+            alt=""
+            aria-hidden="true"
+          />
+        </span>
       </button>
-      <transition name="slide-up">
+      <transition name="slide-down">
         <div
           v-if="showVisualizationPanel"
-          class="map-panel__viz-overlay"
+          class="map-panel__viz-panel"
         >
           <VisualizationPanel
             embedded
@@ -1046,7 +1067,11 @@ watch(hasFeatures, (present) => {
 }
 
 .map-panel__srid-caret {
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   color: #6b7280;
   transition: transform 0.2s ease, color 0.2s ease;
 }
@@ -1054,6 +1079,18 @@ watch(hasFeatures, (present) => {
 .map-panel__srid-caret--open {
   transform: rotate(180deg);
   color: #111827;
+}
+
+.map-panel__chevron {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.map-panel__chevron {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .map-panel__srid-dropdown {
@@ -1157,62 +1194,72 @@ watch(hasFeatures, (present) => {
   padding: 16px;
 }
 
-.map-panel__viz-button {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
-  border: none;
-  border-radius: 12px 12px 0 0;
-  background: rgba(15, 23, 42, 0.92);
-  color: #fff;
-  padding: 10px 16px;
+.map-panel__viz {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-panel__viz-toggle {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
-  z-index: 6;
+  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
 }
 
-.map-panel__viz-button:disabled {
+.map-panel__viz-toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.map-panel__viz-button--open {
-  border-radius: 12px 12px 0 0;
-  background: rgba(15, 23, 42, 0.98);
+.map-panel__viz-toggle--open {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: #f8fafc;
 }
 
-.map-panel__viz-button .map-panel__srid-caret {
+.map-panel__viz-toggle--open .map-panel__srid-caret {
   color: #fef3c7;
 }
 
-.map-panel__viz-overlay {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 64px;
-  border-radius: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.2);
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-  padding: 12px;
-  max-height: 75%;
-  overflow: auto;
-  z-index: 7;
+.map-panel__viz-toggle .map-panel__srid-caret {
+  width: 22px;
+  height: 22px;
+  color: inherit;
 }
 
-.slide-up-enter-active,
-.slide-up-leave-active {
+.map-panel__chevron--viz {
+  width: 20px;
+  height: 20px;
+}
+
+.map-panel__viz-panel {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.slide-down-enter-active,
+.slide-down-leave-active {
   transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
-.slide-up-enter-from,
-.slide-up-leave-to {
-  transform: translateY(20px);
+.slide-down-enter-from,
+.slide-down-leave-to {
+  transform: translateY(-6px);
   opacity: 0;
 }
 

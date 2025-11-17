@@ -81,6 +81,10 @@ const toggleCluster = () => {
   emit("update-visualization", { cluster: !props.visualization.cluster });
 };
 
+const colorModeHasDetail = computed(
+  () => props.visualization.colorMode !== "default",
+);
+
 const panelClasses = computed(() => ({
   "visualization-panel": true,
   "visualization-panel--embedded": props.embedded,
@@ -89,15 +93,24 @@ const panelClasses = computed(() => ({
 
 <template>
   <section :class="panelClasses">
-    <div class="columns-header">
+    <div v-if="!embedded" class="columns-header">
       <h3>간단 시각화</h3>
       <small>색상, 크기, 클러스터를 빠르게 전환해 보세요.</small>
     </div>
 
-    <div class="viz-block">
-      <div class="viz-block__header">
-        <h4>색상 매핑</h4>
-        <div class="toggle-group toggle-group--inline">
+    <div
+      class="viz-block"
+      :class="{ 'viz-block--embedded': embedded }"
+    >
+      <div
+        class="viz-block__header"
+        :class="{ 'viz-block__header--embedded': embedded && colorModeHasDetail }"
+      >
+        <template v-if="embedded">
+          <span class="viz-inline-title">색상 옵션</span>
+        </template>
+        <h4 v-else>색상 매핑</h4>
+        <div class="toggle-group toggle-group--inline viz-toggle-group">
           <button
             v-for="option in colorModeOptions"
             :key="option.value"
@@ -215,9 +228,19 @@ const panelClasses = computed(() => ({
       포인트 지오메트리가 없어 크기·클러스터 옵션이 숨겨졌습니다.
     </p>
 
-    <div class="viz-block" v-if="hasPoints">
-      <div class="viz-block__header">
-        <h4>포인트 크기</h4>
+    <div
+      class="viz-block"
+      :class="{ 'viz-block--embedded': embedded }"
+      v-if="hasPoints"
+    >
+      <div
+        class="viz-block__header"
+        :class="{ 'viz-block__header--embedded': embedded }"
+      >
+        <template v-if="embedded">
+          <span class="viz-inline-title">포인트 크기</span>
+        </template>
+        <h4 v-else>포인트 크기</h4>
       </div>
       <div class="viz-control">
         <label for="size-field">숫자 컬럼</label>
@@ -285,12 +308,19 @@ const panelClasses = computed(() => ({
     <div
       v-if="hasPoints"
       class="viz-block"
+      :class="{ 'viz-block--embedded': embedded }"
     >
-      <div class="viz-block__header">
-        <h4>클러스터링</h4>
+      <div
+        class="viz-block__header"
+        :class="{ 'viz-block__header--embedded': embedded }"
+      >
+        <template v-if="embedded">
+          <span class="viz-inline-title">클러스터링</span>
+        </template>
+        <h4 v-else>클러스터링</h4>
         <button
           type="button"
-          class="toggle toggle--small"
+          class="toggle toggle--small cluster-toggle"
           :class="{ 'toggle--active': visualization.cluster }"
           @click="toggleCluster"
         >
@@ -319,10 +349,14 @@ const panelClasses = computed(() => ({
   border: none;
   padding: 0;
   background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.visualization-panel--embedded .viz-block {
-  background: #fff;
+.visualization-panel--embedded :deep(svg) {
+  width: 12px;
+  height: 12px;
 }
 
 .viz-block {
@@ -342,9 +376,49 @@ const panelClasses = computed(() => ({
   gap: 8px;
 }
 
+.viz-block__header--embedded {
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.viz-inline-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #111827;
+}
+
+.viz-block--embedded {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
 .viz-block__header h4 {
   margin: 0;
   font-size: 14px;
+}
+
+.viz-toggle-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(60px, 1fr));
+  grid-auto-flow: column;
+  gap: 6px;
+  width: fit-content;
+  max-width: 210px;
+}
+
+.viz-toggle-group :deep(.toggle--small) {
+  width: 100%;
+  justify-content: center;
+}
+
+.cluster-toggle {
+  min-width: 60px;
+  max-width: 70px;
+  text-align: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .viz-control {
