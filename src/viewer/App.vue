@@ -53,7 +53,7 @@ const hasParsedOnce = ref(false);
 const currentCollection = shallowRef<FeatureCollectionGeometry | null>(null);
 const sridModalVisible = ref(false);
 const selectedFeatureId = ref<FeatureId | null>(null);
-const hasFileLoaded = computed(() => Boolean(sourceBuffer.value));
+const hasFileLoaded = computed(() => hasParsedOnce.value);
 const parseMode = ref<ParseMode>("full");
 const parseProgress = ref<ParseProgress | null>(null);
 const largeDataset = ref<LargeDatasetState>({
@@ -816,7 +816,6 @@ const runParse = async (
       percent: 98,
     };
     result.value = summarizeCollection(workingCollection, summaryName);
-    hasParsedOnce.value = true;
     errorMessage.value = "";
     const selectionSource = workingCollection;
     if (previousSelection && hasFeatureId(selectionSource, previousSelection)) {
@@ -840,6 +839,7 @@ const runParse = async (
       openLargeModal("feature");
     }
     parseProgress.value = null;
+    hasParsedOnce.value = true;
     logDebug("runParse:complete", {
       jobId,
       featureCount: workingCollection.features?.length ?? 0,
@@ -1102,6 +1102,11 @@ watch(
           @select-file="onFileSelect"
         />
 
+        <ParseProgressBar
+          v-if="parseProgress"
+          :progress="parseProgress"
+        />
+
         <ZipInspectionPanel
           v-if="zipInspection"
           :inspection="zipInspection"
@@ -1111,11 +1116,6 @@ watch(
       </div>
 
       <div class="panel-stack panel-stack--right">
-        <ParseProgressBar
-          v-if="parseProgress"
-          :progress="parseProgress"
-        />
-
         <LargeDatasetBanner
           v-if="shouldShowLargeBanner"
           :parse-mode="parseMode"
