@@ -1,7 +1,7 @@
 .popup-container {
-  width: 880px;
-  min-height: 620px;
-  max-height: 760px;
+  width: 960px;
+  min-height: 680px;
+  max-height: 820px;
   padding: 24px;
   background: #fff;
   box-sizing: border-box;
