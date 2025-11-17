@@ -109,6 +109,17 @@ export type VisualizationConfig = VisualizationSettings & {
   pointSizeStops: SizeStop[] | null;
 };
 
+export type NumericLegendEntry = {
+  color: string;
+  label: string;
+};
+
+export type SizeLegend = {
+  field: string;
+  min: SizeStop;
+  max: SizeStop;
+} | null;
+
 export type ParseProgress = {
   label: string;
   percent: number;

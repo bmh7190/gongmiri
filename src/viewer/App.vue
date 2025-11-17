@@ -7,7 +7,6 @@ import ResultPanel from "./components/ResultPanel.vue";
 import SridModal from "./components/SridModal.vue";
 import MapPanel from "./components/MapPanel.vue";
 import DataGrid from "./components/DataGrid.vue";
-import VisualizationPanel from "./components/VisualizationPanel.vue";
 import LargeDatasetModal from "./components/LargeDatasetModal.vue";
 import LargeDatasetBanner from "./components/LargeDatasetBanner.vue";
 import ParseProgressBar from "./components/ParseProgressBar.vue";
@@ -1138,19 +1137,15 @@ watch(
           :prj-text="prjSummary"
           :selected-feature-id="selectedFeatureId"
           :visualization="visualizationConfig"
-          @update:srid="handleSridUpdate"
-          @use-file-projection="resetToFileProjection"
-          @feature-focus="handleFeatureFocusFromMap"
-        />
-
-        <VisualizationPanel
-          v-if="currentCollection && result"
-          :columns="result.columns"
-          :visualization="visualizationSettings"
+          :visualization-settings="visualizationSettings"
+          :columns="result?.columns ?? []"
           :category-legend="categoryLegend"
           :numeric-legend="numericLegend"
           :size-legend="sizeLegend"
-          :has-points="hasPointGeometry"
+          :has-point-geometry="hasPointGeometry"
+          @update:srid="handleSridUpdate"
+          @use-file-projection="resetToFileProjection"
+          @feature-focus="handleFeatureFocusFromMap"
           @update-visualization="updateVisualization"
         />
 
