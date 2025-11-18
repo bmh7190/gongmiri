@@ -56,10 +56,15 @@ const emit = defineEmits<{
 }>();
 
 const SOURCE_ID = "gongmiri-preview-source";
+const SELECTED_SOURCE_ID = "gongmiri-selected-feature";
 const POINT_LAYER_ID = "gongmiri-points";
 const LINE_LAYER_ID = "gongmiri-lines";
 const POLYGON_FILL_LAYER_ID = "gongmiri-polygons";
 const POLYGON_OUTLINE_LAYER_ID = "gongmiri-polygon-outline";
+const SELECTED_POLYGON_FILL_LAYER_ID = "gongmiri-selected-polygons";
+const SELECTED_POLYGON_OUTLINE_LAYER_ID = "gongmiri-selected-polygon-outline";
+const SELECTED_LINE_LAYER_ID = "gongmiri-selected-lines";
+const SELECTED_POINT_LAYER_ID = "gongmiri-selected-points";
 const CLUSTER_SOURCE_ID = "gongmiri-cluster-source";
 const CLUSTER_LAYER_ID = "gongmiri-cluster-layer";
 const CLUSTER_COUNT_LAYER_ID = "gongmiri-cluster-count";
@@ -74,6 +79,13 @@ const DEFAULT_COLORS = {
   point: "#22c55e",
 };
 const DEFAULT_POINT_RADIUS = 4;
+const SELECTION_COLORS = {
+  polygonFill: "#f31260",
+  polygonOutline: "#be185d",
+  line: "#f31260",
+  pointFill: "#f31260",
+  pointStroke: "#9d174d",
+};
 
 const EMPTY_COLLECTION: FeatureCollectionGeometry = {
   type: "FeatureCollection",
@@ -124,6 +136,10 @@ const initMap = () => {
       data: EMPTY_COLLECTION,
       promoteId: "id",
     });
+    map.addSource(SELECTED_SOURCE_ID, {
+      type: "geojson",
+      data: EMPTY_COLLECTION,
+    });
     map.addSource(CLUSTER_SOURCE_ID, {
       type: "geojson",
       data: EMPTY_COLLECTION,
@@ -133,6 +149,7 @@ const initMap = () => {
       clusterRadius: 50,
     });
     addLayers(map);
+    addSelectedLayers(map);
     registerInteractions(map);
     isMapReady.value = true;
     syncCollection();
@@ -156,18 +173,8 @@ const addLayers = (map: MapHandle) => {
     type: "fill",
     source: SOURCE_ID,
     paint: {
-      "fill-color": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        "#fbbf24",
-        "#0ea5e9",
-      ],
-      "fill-opacity": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        0.35,
-        0.2,
-      ],
+      "fill-color": DEFAULT_COLORS.polygonFill,
+      "fill-opacity": 0.2,
     },
     filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
   });
@@ -177,18 +184,8 @@ const addLayers = (map: MapHandle) => {
     type: "line",
     source: SOURCE_ID,
     paint: {
-      "line-color": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        "#f59e0b",
-        "#0284c7",
-      ],
-      "line-width": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        2,
-        1.2,
-      ],
+      "line-color": DEFAULT_COLORS.polygonOutline,
+      "line-width": 1.2,
     },
     filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
   });
@@ -198,18 +195,8 @@ const addLayers = (map: MapHandle) => {
     type: "line",
     source: SOURCE_ID,
     paint: {
-      "line-color": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        "#f59e0b",
-        "#f97316",
-      ],
-      "line-width": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        2,
-        1.2,
-      ],
+      "line-color": DEFAULT_COLORS.line,
+      "line-width": 1.2,
     },
     filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false],
   });
@@ -219,25 +206,10 @@ const addLayers = (map: MapHandle) => {
     type: "circle",
     source: SOURCE_ID,
     paint: {
-      "circle-radius": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        6,
-        4,
-      ],
-      "circle-color": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        "#facc15",
-        "#22c55e",
-      ],
+      "circle-radius": DEFAULT_POINT_RADIUS,
+      "circle-color": DEFAULT_COLORS.point,
       "circle-stroke-width": 1,
-      "circle-stroke-color": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        "#92400e",
-        "#065f46",
-      ],
+      "circle-stroke-color": "#065f46",
     },
     filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
   });
@@ -295,26 +267,59 @@ const addLayers = (map: MapHandle) => {
     filter: ["!", ["has", "point_count"]],
     layout: { visibility: "none" },
     paint: {
-      "circle-radius": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        6,
-        4,
-      ],
-      "circle-color": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        "#facc15",
-        "#22c55e",
-      ],
+      "circle-radius": DEFAULT_POINT_RADIUS,
+      "circle-color": DEFAULT_COLORS.point,
       "circle-stroke-width": 1,
-      "circle-stroke-color": [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        "#92400e",
-        "#065f46",
-      ],
+      "circle-stroke-color": "#065f46",
     },
+  });
+};
+
+const addSelectedLayers = (map: MapHandle) => {
+  map.addLayer({
+    id: SELECTED_POLYGON_FILL_LAYER_ID,
+    type: "fill",
+    source: SELECTED_SOURCE_ID,
+    paint: {
+      "fill-color": SELECTION_COLORS.polygonFill,
+      "fill-opacity": 0.3,
+    },
+    filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+  });
+
+  map.addLayer({
+    id: SELECTED_POLYGON_OUTLINE_LAYER_ID,
+    type: "line",
+    source: SELECTED_SOURCE_ID,
+    paint: {
+      "line-color": SELECTION_COLORS.polygonOutline,
+      "line-width": 1.2,
+    },
+    filter: ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
+  });
+
+  map.addLayer({
+    id: SELECTED_LINE_LAYER_ID,
+    type: "line",
+    source: SELECTED_SOURCE_ID,
+    paint: {
+      "line-color": SELECTION_COLORS.line,
+      "line-width": 1.2,
+    },
+    filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false],
+  });
+
+  map.addLayer({
+    id: SELECTED_POINT_LAYER_ID,
+    type: "circle",
+    source: SELECTED_SOURCE_ID,
+    paint: {
+      "circle-radius": DEFAULT_POINT_RADIUS,
+      "circle-color": SELECTION_COLORS.pointFill,
+      "circle-stroke-width": 1,
+      "circle-stroke-color": SELECTION_COLORS.pointStroke,
+    },
+    filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
   });
 };
 
@@ -456,6 +461,7 @@ const syncCollection = () => {
     resetView();
   }
   applyFeatureState(props.selectedFeatureId ?? null);
+  updateSelectedFeatureSource(props.selectedFeatureId ?? null);
   applyVisualization();
 };
 
@@ -483,16 +489,6 @@ const setPaintPropertySafe = (layerId: string, property: string, value: unknown)
   map.setPaintProperty(layerId, property, value);
 };
 
-const withSelection = (
-  highlightColor: string,
-  base: maplibregl.ExpressionSpecification | string,
-): maplibregl.ExpressionSpecification => [
-  "case",
-  ["boolean", ["feature-state", "selected"], false],
-  highlightColor,
-  base,
-];
-
 const applyVisualization = () => {
   if (!isMapReady.value) return;
   applyColorVisualization();
@@ -509,27 +505,27 @@ const applyColorVisualization = () => {
   setPaintPropertySafe(
     POLYGON_FILL_LAYER_ID,
     "fill-color",
-    withSelection("#fbbf24", fillColor),
+    fillColor,
   );
   setPaintPropertySafe(
     POLYGON_OUTLINE_LAYER_ID,
     "line-color",
-    withSelection("#f59e0b", outlineColor),
+    outlineColor,
   );
   setPaintPropertySafe(
     LINE_LAYER_ID,
     "line-color",
-    withSelection("#f59e0b", lineColor),
+    lineColor,
   );
   setPaintPropertySafe(
     POINT_LAYER_ID,
     "circle-color",
-    withSelection("#facc15", pointColor),
+    pointColor,
   );
   setPaintPropertySafe(
     CLUSTER_POINT_LAYER_ID,
     "circle-color",
-    withSelection("#facc15", pointColor),
+    pointColor,
   );
 };
 
@@ -613,16 +609,11 @@ const applyPointSizeVisualization = () => {
   setPaintPropertySafe(CLUSTER_POINT_LAYER_ID, "circle-radius", radiusExpression);
 };
 
-const buildRadiusExpression = (): maplibregl.ExpressionSpecification => {
+const buildRadiusExpression = (): maplibregl.ExpressionSpecification | number => {
   const stops = props.visualization.pointSizeStops;
   const field = props.visualization.pointSizeField;
   if (!stops || !field || stops.length < 2) {
-    return [
-      "case",
-      ["boolean", ["feature-state", "selected"], false],
-      DEFAULT_POINT_RADIUS + 2,
-      DEFAULT_POINT_RADIUS,
-    ];
+    return DEFAULT_POINT_RADIUS;
   }
   const interpolate: maplibregl.ExpressionSpecification = [
     "interpolate",
@@ -630,12 +621,7 @@ const buildRadiusExpression = (): maplibregl.ExpressionSpecification => {
     ["coalesce", ["to-number", ["get", field]], stops[0]!.value],
     ...stops.flatMap((stop) => [stop.value, stop.radius]),
   ];
-  return [
-    "case",
-    ["boolean", ["feature-state", "selected"], false],
-    ["+", interpolate, 2],
-    interpolate,
-  ];
+  return interpolate;
 };
 
 const applyClusterVisibility = () => {
@@ -672,6 +658,36 @@ const applyFeatureState = (featureId: FeatureId | null) => {
   updateSourceSelection(SOURCE_ID, activeFeatureId.value, featureId);
   updateSourceSelection(CLUSTER_SOURCE_ID, activeFeatureId.value, featureId);
   activeFeatureId.value = featureId;
+};
+
+const setSelectedFeatureGeometry = (feature: FeatureGeometry | null) => {
+  if (!mapInstance.value) return;
+  const source = mapInstance.value.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
+  if (!source) return;
+  if (!feature) {
+    source.setData(EMPTY_COLLECTION);
+    return;
+  }
+  const plainFeature = JSON.parse(JSON.stringify(feature)) as FeatureGeometry;
+  source.setData({
+    type: "FeatureCollection",
+    features: [plainFeature],
+  });
+};
+
+const updateSelectedFeatureSource = (featureId: FeatureId | null) => {
+  if (!featureId || !props.collection?.features?.length) {
+    setSelectedFeatureGeometry(null);
+    return;
+  }
+  const feature = props.collection.features.find(
+    (item) => String(item.id ?? "") === featureId,
+  );
+  if (!feature?.geometry) {
+    setSelectedFeatureGeometry(null);
+    return;
+  }
+  setSelectedFeatureGeometry(toRaw(feature) as FeatureGeometry);
 };
 
 const updateSourceSelection = (
@@ -888,6 +904,7 @@ watch(
   (next, prev) => {
     if (!isMapReady.value) return;
     applyFeatureState(next ?? null);
+    updateSelectedFeatureSource(next ?? null);
     if (next && next !== prev) {
       focusFeatureById(next);
     }
