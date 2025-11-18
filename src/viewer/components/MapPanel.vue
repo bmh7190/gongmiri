@@ -327,8 +327,9 @@ const registerInteractions = (map: MapHandle) => {
   const handleClick = (event: MapLayerMouseEvent) => {
     const feature = event.features?.[0];
     if (!feature) return;
-    focusOnFeature(event);
-    showPopup(feature, event.lngLat);
+    const featureCenter = getFeatureCenter(feature) ?? event.lngLat;
+    focusOnFeature(featureCenter);
+    showPopup(feature, featureCenter);
     if (feature.id !== undefined && feature.id !== null) {
       emit("feature-focus", String(feature.id));
     }
@@ -380,10 +381,10 @@ const registerInteractions = (map: MapHandle) => {
   map.on("mouseleave", CLUSTER_LAYER_ID, () => hoverCursor(false));
 };
 
-const focusOnFeature = (event: MapLayerMouseEvent) => {
+const focusOnFeature = (target: LngLatLike) => {
   if (!mapInstance.value) return;
   mapInstance.value.easeTo({
-    center: event.lngLat,
+    center: target,
     duration: 600,
   });
 };
@@ -393,7 +394,13 @@ const showPopup = (feature: MapGeoJSONFeature, position: LngLatLike) => {
   const html = buildPopupHtml(feature);
   const targetMap = mapInstance.value;
   if (!targetMap) return;
-  popupRef.value = new maplibregl.Popup({ closeButton: true })
+  popupRef.value = new maplibregl.Popup({
+    closeButton: true,
+    closeOnMove: false,
+    offset: 12,
+    maxWidth: "280px",
+    anchor: "center",
+  })
     .setLngLat(position)
     .setHTML(html)
     // MapLibre typings expect their internal Map$1 type; cast to never to satisfy TS.
@@ -403,20 +410,99 @@ const showPopup = (feature: MapGeoJSONFeature, position: LngLatLike) => {
 const buildPopupHtml = (feature: MapGeoJSONFeature): string => {
   const props = feature.properties ?? {};
   const rows = Object.entries(props)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
     .slice(0, 6)
     .map(([key, value]) => {
       const safeKey = escapeHtml(key);
       const safeValue = escapeHtml(formatValue(value));
-      return `<div class="popup-row"><strong>${safeKey}</strong><span>${safeValue}</span></div>`;
+      return `
+        <tr class="popup-row">
+          <th scope="row" class="popup-row__label">${safeKey}</th>
+          <td class="popup-row__value">${safeValue}</td>
+        </tr>
+      `;
     })
     .join("");
 
   return `
     <div class="map-popup">
-      <h4>속성 요약</h4>
-      ${rows || "<em>값이 없습니다</em>"}
+      <header class="map-popup__header">
+        <h4>속성 요약</h4>
+      </header>
+      ${rows
+        ? `
+          <div class="map-popup__table-wrapper">
+            <table class="popup-table">
+              <colgroup>
+                <col class="popup-table__col popup-table__col--key" />
+                <col class="popup-table__col popup-table__col--value" />
+              </colgroup>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        `
+        : '<div class="map-popup__empty">표시할 속성이 없습니다</div>'}
     </div>
   `;
+};
+
+const getFeatureCenter = (feature: MapGeoJSONFeature): LngLatLike | null => {
+  const geometry = feature.geometry as Geometry | undefined;
+  if (!geometry) return null;
+  if (geometry.type === "Point") {
+    return geometry.coordinates as LngLatLike;
+  }
+  const positions = getGeometryPositions(geometry);
+  if (!positions.length) return null;
+  let minLng = Infinity;
+  let minLat = Infinity;
+  let maxLng = -Infinity;
+  let maxLat = -Infinity;
+
+  for (const position of positions) {
+    const [lng, lat] = position;
+    if (typeof lng !== "number" || typeof lat !== "number") continue;
+    minLng = Math.min(minLng, lng);
+    maxLng = Math.max(maxLng, lng);
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+  }
+
+  if (!Number.isFinite(minLng) || !Number.isFinite(minLat) || !Number.isFinite(maxLng) || !Number.isFinite(maxLat)) {
+    return null;
+  }
+  return [
+    (minLng + maxLng) / 2,
+    (minLat + maxLat) / 2,
+  ] as LngLatLike;
+};
+
+const getGeometryPositions = (geometry: Geometry): Position[] => {
+  if (geometry.type === "GeometryCollection") {
+    return geometry.geometries.flatMap(getGeometryPositions);
+  }
+  return collectPositions(geometry.coordinates);
+};
+
+const collectPositions = (input: unknown): Position[] => {
+  if (isPosition(input)) {
+    return [input];
+  }
+  if (Array.isArray(input)) {
+    return (input as unknown[]).flatMap((value) => collectPositions(value));
+  }
+  return [];
+};
+
+const isPosition = (value: unknown): value is Position => {
+  return (
+    Array.isArray(value)
+    && value.length >= 2
+    && typeof value[0] === "number"
+    && typeof value[1] === "number"
+  );
 };
 
 const escapeHtml = (value: unknown): string => {
@@ -1282,28 +1368,86 @@ watch(hasFeatures, (present) => {
 
 .map-popup {
   font-size: 12px;
-  min-width: 180px;
+  min-width: 320px;
+  max-width: 440px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow:
+    0 24px 55px rgba(15, 23, 42, 0.18),
+    0 8px 18px rgba(15, 23, 42, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  overflow: hidden;
 }
 
-.map-popup h4 {
-  margin: 0 0 6px;
-  font-size: 13px;
-  color: #111827;
+.map-popup__header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.12));
 }
 
-.popup-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
+.map-popup__header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0f172a;
 }
 
-.popup-row strong {
-  color: #1f2937;
+.map-popup__table-wrapper {
+  background: #fff;
 }
 
-.popup-row span {
-  color: #4b5563;
-  text-align: right;
+.map-popup__empty {
+  color: #94a3b8;
+  text-align: center;
+  padding: 16px;
+}
+
+.popup-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.popup-table__col--key {
+  width: 40%;
+}
+
+.popup-table__col--value {
+  width: 60%;
+}
+
+.popup-table tbody tr {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.popup-table tbody tr:nth-child(odd) {
+  background: #f8fafc;
+}
+
+.popup-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.popup-row__label,
+.popup-row__value {
+  padding: 10px 14px;
+  vertical-align: top;
+}
+
+.popup-row__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.popup-row__value {
+  font-size: 12px;
+  color: #0f172a;
+  line-height: 1.5;
+  word-break: break-word;
 }
 </style>
