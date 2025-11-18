@@ -273,16 +273,16 @@ watch(
           :style="{ transform: `translateY(${translateY}px)` }"
         >
           <button
-            v-for="(row, localIndex) in visibleRows"
-            :key="row.id"
-            type="button"
-            class="data-grid__row"
-            :class="{
-              'data-grid__row--selected': selectedId === row.id,
-            }"
-            :style="{ gridTemplateColumns: rowTemplate }"
-            @click="handleRowClick(row.id)"
-          >
+          v-for="(row, localIndex) in visibleRows"
+          :key="row.id"
+          type="button"
+          class="data-grid__row"
+          :class="{
+            'data-grid__row--selected': props.selectedId === row.id,
+          }"
+          :style="{ gridTemplateColumns: rowTemplate }"
+          @click="handleRowClick(row.id)"
+        >
             <span class="data-grid__cell data-grid__cell--id">
               {{ startIndex + localIndex + 1 }}
             </span>
