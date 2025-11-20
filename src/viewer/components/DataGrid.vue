@@ -261,12 +261,14 @@ watch(
 <template>
   <section class="data-grid" :class="{ 'data-grid--empty': !rows.length }">
     <div class="columns-header columns-header--with-action">
-      <div class="columns-header__row">
+      <div class="columns-header__meta">
         <h3>DB 테이블</h3>
-        <div class="toggle-group">
-          <button
-            type="button"
-            class="toggle"
+        <small>{{ rows.length ? `${totalRows.toLocaleString()}행 · 가상 스크롤` : "표시할 행이 없습니다." }}</small>
+      </div>
+      <div class="toggle-group">
+        <button
+          type="button"
+          class="toggle"
           :class="{ 'toggle--active': props.encoding === 'utf-8' }"
           @click="setEncoding('utf-8')"
         >
@@ -283,14 +285,12 @@ watch(
         <button
           type="button"
           class="toggle"
-            :class="{ 'toggle--active': props.encoding === 'euc-kr' }"
-            @click="setEncoding('euc-kr')"
-          >
-            EUC-KR
-          </button>
-        </div>
+          :class="{ 'toggle--active': props.encoding === 'euc-kr' }"
+          @click="setEncoding('euc-kr')"
+        >
+          EUC-KR
+        </button>
       </div>
-      <small>{{ rows.length ? `${totalRows.toLocaleString()}행 · 가상 스크롤` : "표시할 행이 없습니다." }}</small>
     </div>
 
     <div v-if="rows.length" class="data-grid__viewport-wrapper">
@@ -511,23 +511,27 @@ watch(
 
 .columns-header--with-action {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.columns-header__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: flex-end;
   gap: 12px;
 }
 
-.columns-header__row h3 {
+.columns-header__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.columns-header__meta h3 {
   margin: 0;
 }
 
 .columns-header--with-action .toggle-group {
   margin-left: auto;
+  margin-top: 0;
+  align-self: flex-end;
 }
 
 .data-grid__overlay {
