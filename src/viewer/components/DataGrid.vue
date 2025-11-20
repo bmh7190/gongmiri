@@ -28,6 +28,7 @@ const props = defineProps<{
   columns: ColumnStat[];
   selectedId: FeatureId | null;
   encoding: EncodingOption;
+  encodingChanging?: boolean;
   detectedEncoding?: EncodingOption;
   hasCpg?: boolean;
 }>();
@@ -292,58 +293,66 @@ watch(
       <small>{{ rows.length ? `${totalRows.toLocaleString()}행 · 가상 스크롤` : "표시할 행이 없습니다." }}</small>
     </div>
 
-    <div v-if="rows.length" ref="viewportRef" class="data-grid__viewport" @scroll="handleScroll">
-        <div
-          class="data-grid__header-row"
-          :style="{ gridTemplateColumns: rowTemplate }"
-        >
-          <span
-            class="data-grid__cell data-grid__cell--head data-grid__cell--id"
-              aria-label="Row number"
-          ></span>
-          <span
-            v-for="column in columnOrder"
-            :key="column"
-            class="data-grid__cell data-grid__cell--head"
-            :class="{ 'data-grid__cell--head-expanded': expandedColumns.has(column) }"
-            @click="toggleColumnWidth(column)"
-            @keydown.enter.prevent="toggleColumnWidth(column)"
-            @keydown.space.prevent="toggleColumnWidth(column)"
-            role="button"
-            tabindex="0"
+    <div v-if="rows.length" class="data-grid__viewport-wrapper">
+      <div ref="viewportRef" class="data-grid__viewport" @scroll="handleScroll">
+          <div
+            class="data-grid__header-row"
+            :style="{ gridTemplateColumns: rowTemplate }"
           >
-            {{ column || "(이름 없음)" }}
-          </span>
-        </div>
-        <div class="data-grid__spacer" :style="{ height: `${totalHeight}px` }">
-          <div class="data-grid__virtual" :style="{ transform: `translateY(${translateY}px)` }">
-            <button
-              v-for="(row, localIndex) in visibleRows"
-              :key="row.id"
-              type="button"
-              class="data-grid__row"
-              :class="{
-                'data-grid__row--selected': props.selectedId === row.id,
-                'data-grid__row--striped': (startIndex + localIndex) % 2 === 1,
-              }"
-              :style="{ gridTemplateColumns: rowTemplate }"
-              @click="handleRowClick(row.id)"
+            <span
+              class="data-grid__cell data-grid__cell--head data-grid__cell--id"
+                aria-label="Row number"
+            ></span>
+            <span
+              v-for="column in columnOrder"
+              :key="column"
+              class="data-grid__cell data-grid__cell--head"
+              :class="{ 'data-grid__cell--head-expanded': expandedColumns.has(column) }"
+              @click="toggleColumnWidth(column)"
+              @keydown.enter.prevent="toggleColumnWidth(column)"
+              @keydown.space.prevent="toggleColumnWidth(column)"
+              role="button"
+              tabindex="0"
             >
-              <span class="data-grid__cell data-grid__cell--id">
-                {{ startIndex + localIndex + 1 }}
-              </span>
-              <span
-                v-for="column in columnOrder"
-                :key="`${row.id}-${column}`"
-                class="data-grid__cell"
-                @click.stop="handleCellClick(column, row.id)"
-                :title="formatCellValue(row.properties[column])"
-              >
-                {{ formatCellValue(row.properties[column]) }}
-              </span>
-            </button>
+              {{ column || "(이름 없음)" }}
+            </span>
           </div>
+          <div class="data-grid__spacer" :style="{ height: `${totalHeight}px` }">
+            <div class="data-grid__virtual" :style="{ transform: `translateY(${translateY}px)` }">
+              <button
+                v-for="(row, localIndex) in visibleRows"
+                :key="row.id"
+                type="button"
+                class="data-grid__row"
+                :class="{
+                  'data-grid__row--selected': props.selectedId === row.id,
+                  'data-grid__row--striped': (startIndex + localIndex) % 2 === 1,
+                }"
+                :style="{ gridTemplateColumns: rowTemplate }"
+                @click="handleRowClick(row.id)"
+              >
+                <span class="data-grid__cell data-grid__cell--id">
+                  {{ startIndex + localIndex + 1 }}
+                </span>
+                <span
+                  v-for="column in columnOrder"
+                  :key="`${row.id}-${column}`"
+                  class="data-grid__cell"
+                  @click.stop="handleCellClick(column, row.id)"
+                  :title="formatCellValue(row.properties[column])"
+                >
+                  {{ formatCellValue(row.properties[column]) }}
+                </span>
+              </button>
+            </div>
+          </div>
+      </div>
+      <div v-if="props.encodingChanging" class="data-grid__overlay">
+        <div class="data-grid__overlay-content">
+          <span class="data-grid__spinner" aria-hidden="true"></span>
+          <span>인코딩 변경 중…</span>
         </div>
+      </div>
     </div>
 
     <div v-else class="data-grid__empty-state">
@@ -436,6 +445,7 @@ watch(
   scrollbar-gutter: stable;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
+  position: relative;
 }
 
 .data-grid__spacer {
@@ -471,6 +481,10 @@ watch(
 
 .data-grid__row--selected {
   background: #dbeafe;
+}
+
+.data-grid__viewport-wrapper {
+  position: relative;
 }
 
 .data-grid--empty {
@@ -514,6 +528,50 @@ watch(
 
 .columns-header--with-action .toggle-group {
   margin-left: auto;
+}
+
+.data-grid__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.data-grid__overlay-content {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: "Pretendard SemiBold", system-ui, sans-serif;
+  box-shadow: none;
+}
+
+.data-grid__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: data-grid-spin 0.9s linear infinite;
+}
+
+@keyframes data-grid-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 </style>

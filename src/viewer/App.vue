@@ -44,6 +44,7 @@ const errorMessage = ref("");
 const result = ref<ViewerResult | null>(null);
 const zipInspection = ref<ZipInspection | null>(null);
 const encoding = ref<EncodingOption>("utf-8");
+const encodingChanging = ref(false);
 const srid = ref<SridCode | null>(null);
 type SridMode = "file" | "manual";
 const sridMode = ref<SridMode>("file");
@@ -1003,8 +1004,8 @@ const parseEncodingLabel = (label: string): EncodingOption | undefined => {
 };
 
 const triggerReparse = () => {
-  if (!sourceBuffer.value) return;
-  runParse(sourceBuffer.value);
+  if (!sourceBuffer.value) return Promise.resolve();
+  return runParse(sourceBuffer.value);
 };
 
 const confirmSridSelection = async () => {
@@ -1026,10 +1027,15 @@ watch(
   },
 );
 
-watch(encoding, (next, prev) => {
+watch(encoding, async (next, prev) => {
   if (!hasParsedOnce.value) return;
   if (next === prev) return;
-  triggerReparse();
+  encodingChanging.value = true;
+  try {
+    await triggerReparse();
+  } finally {
+    encodingChanging.value = false;
+  }
 });
 
 watch(
@@ -1176,6 +1182,7 @@ watch(
           :columns="result.columns"
           :selected-id="selectedFeatureId"
           :encoding="encoding"
+          :encoding-changing="encodingChanging"
           :detected-encoding="zipInspection?.detectedEncoding"
           :has-cpg="zipInspection?.hasCpg"
           @select="handleGridSelection"
