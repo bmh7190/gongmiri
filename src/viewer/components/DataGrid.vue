@@ -13,10 +13,16 @@ import type {
   EncodingOption,
 } from "../types";
 
-const ROW_HEIGHT = 35;
+const ROW_HEIGHT = 30;
 const HEADER_HEIGHT = ROW_HEIGHT;
 const BUFFER_ROWS = 6;
 const DEFAULT_HEIGHT = 360;
+const MIN_COLUMN_WIDTH = 140;
+const MIN_ID_COLUMN_WIDTH = 44;
+const MAX_EXPANDED_WIDTH = 640;
+const EST_CHAR_PX = 7;
+const CELL_HORIZONTAL_PADDING = 24;
+const WIDTH_SAMPLE_ROWS = 200;
 
 const props = defineProps<{
   collection: FeatureCollectionGeometry | null;
@@ -37,6 +43,8 @@ const scrollTop = ref(0);
 const viewportHeight = ref(DEFAULT_HEIGHT);
 let resizeObserver: ResizeObserver | null = null;
 
+const expandedColumns = ref<Set<string>>(new Set());
+
 const rows = computed(() => {
   const features = props.collection?.features ?? [];
   return features.map((feature, index) => ({
@@ -53,11 +61,40 @@ const columnOrder = computed(() => {
   return Object.keys(firstRow);
 });
 
+const estimatedExpandedWidths = computed(() => {
+  const widths = new Map<string, number>();
+  if (!expandedColumns.value.size) return widths;
+
+  const samples = rows.value.slice(0, WIDTH_SAMPLE_ROWS);
+
+  for (const column of columnOrder.value) {
+    if (!expandedColumns.value.has(column)) continue;
+    let maxLength = column?.length ?? 0;
+    for (const row of samples) {
+      const value = row.properties[column];
+      const length = getFormattedLength(value);
+      if (length > maxLength) maxLength = length;
+    }
+    const estimatedWidth = Math.max(
+      MIN_COLUMN_WIDTH,
+      Math.min(MAX_EXPANDED_WIDTH, Math.round(maxLength * EST_CHAR_PX + CELL_HORIZONTAL_PADDING)),
+    );
+    widths.set(column, estimatedWidth);
+  }
+
+  return widths;
+});
+
 const rowTemplate = computed(() => {
+  const expanded = expandedColumns.value;
   const dynamicColumns = columnOrder.value.length
-    ? columnOrder.value.map(() => "minmax(140px, 1fr)")
-    : ["minmax(140px, 1fr)"];
-  return ["minmax(48px, 0.12fr)", ...dynamicColumns].join(" ");
+    ? columnOrder.value.map((name) =>
+      expanded.has(name)
+        ? `${estimatedExpandedWidths.value.get(name) ?? MIN_COLUMN_WIDTH}px`
+        : `minmax(${MIN_COLUMN_WIDTH}px, 1fr)`,
+    )
+    : [`minmax(${MIN_COLUMN_WIDTH}px, 1fr)`];
+  return [`minmax(${MIN_ID_COLUMN_WIDTH}px, max-content)`, ...dynamicColumns].join(" ");
 });
 
 const totalRows = computed(() => rows.value.length);
@@ -104,6 +141,38 @@ const handleScroll = () => {
 
 const handleRowClick = (rowId: FeatureId) => {
   emit("select", rowId);
+};
+
+const handleCellClick = (column: string, rowId: FeatureId) => {
+  toggleColumnWidth(column);
+  handleRowClick(rowId);
+};
+
+const getFormattedLength = (value: unknown): number => {
+  if (value === null || value === undefined) return 1;
+  if (typeof value === "number") {
+    const formatted = Number.isInteger(value) ? value.toString() : value.toFixed(3);
+    return formatted.length;
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value).length;
+    } catch {
+      return "[object]".length;
+    }
+  }
+  return String(value).length;
+};
+
+const toggleColumnWidth = (column: string) => {
+  if (!column) return;
+  const next = new Set(expandedColumns.value);
+  if (next.has(column)) {
+    next.delete(column);
+  } else {
+    next.add(column);
+  }
+  expandedColumns.value = next;
 };
 
 const ensureRowVisible = (rowId: FeatureId | null) => {
@@ -225,13 +294,20 @@ watch(
           class="data-grid__header-row"
           :style="{ gridTemplateColumns: rowTemplate }"
         >
-          <span class="data-grid__cell data-grid__cell--head data-grid__cell--id">
-            #
-          </span>
+          <span
+            class="data-grid__cell data-grid__cell--head data-grid__cell--id"
+              aria-label="Row number"
+          ></span>
           <span
             v-for="column in columnOrder"
             :key="column"
             class="data-grid__cell data-grid__cell--head"
+            :class="{ 'data-grid__cell--head-expanded': expandedColumns.has(column) }"
+            @click="toggleColumnWidth(column)"
+            @keydown.enter.prevent="toggleColumnWidth(column)"
+            @keydown.space.prevent="toggleColumnWidth(column)"
+            role="button"
+            tabindex="0"
           >
             {{ column || "(이름 없음)" }}
           </span>
@@ -257,6 +333,7 @@ watch(
                 v-for="column in columnOrder"
                 :key="`${row.id}-${column}`"
                 class="data-grid__cell"
+                @click.stop="handleCellClick(column, row.id)"
                 :title="formatCellValue(row.properties[column])"
               >
                 {{ formatCellValue(row.properties[column]) }}
@@ -293,7 +370,7 @@ watch(
   gap: 0;
   align-items: stretch;
   box-sizing: border-box;
-  height: 35px;
+  height: 30px;
 }
 
 .data-grid__cell {
@@ -303,7 +380,7 @@ watch(
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  padding: 9px 12px;
+  padding: 7px 12px;
   display: flex;
   align-items: center;
   box-sizing: border-box;
@@ -315,11 +392,18 @@ watch(
   font-weight: 600;
   color: #374151;
   background: transparent;
+  cursor: pointer;
+  user-select: none;
 }
 
 .data-grid__header-row .data-grid__cell {
   background: #f8fafc;
   font-weight: 600;
+  color: #374151;
+}
+
+.data-grid__cell--head-expanded {
+  background: #e5e7eb;
 }
 
 .data-grid__header-row {
@@ -371,7 +455,7 @@ watch(
 }
 
 .data-grid__row--striped {
-  background: #f9fafb;
+  background: #fff;
 }
 
 .data-grid__row:last-child {
