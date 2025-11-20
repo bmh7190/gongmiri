@@ -589,14 +589,6 @@ const ensureFeatureIds = (collection: FeatureCollectionGeometry) => {
       feature.properties?.ID ??
       `feature-${index}`;
     feature.id = toFeatureId(candidate);
-    const props =
-      feature.properties && typeof feature.properties === "object"
-        ? feature.properties
-        : {};
-    feature.properties = {
-      ...props,
-      id: feature.id,
-    };
   });
 };
 

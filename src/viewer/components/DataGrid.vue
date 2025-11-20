@@ -17,12 +17,11 @@ const ROW_HEIGHT = 30;
 const HEADER_HEIGHT = ROW_HEIGHT;
 const BUFFER_ROWS = 6;
 const DEFAULT_HEIGHT = 360;
-const MIN_COLUMN_WIDTH = 140;
+const MIN_COLUMN_WIDTH = 120;
 const MIN_ID_COLUMN_WIDTH = 44;
-const MAX_EXPANDED_WIDTH = 640;
+const MAX_EXPANDED_WIDTH = 900;
 const EST_CHAR_PX = 7;
 const CELL_HORIZONTAL_PADDING = 24;
-const WIDTH_SAMPLE_ROWS = 200;
 
 const props = defineProps<{
   collection: FeatureCollectionGeometry | null;
@@ -65,19 +64,23 @@ const estimatedExpandedWidths = computed(() => {
   const widths = new Map<string, number>();
   if (!expandedColumns.value.size) return widths;
 
-  const samples = rows.value.slice(0, WIDTH_SAMPLE_ROWS);
-
-  for (const column of columnOrder.value) {
-    if (!expandedColumns.value.has(column)) continue;
+  for (const column of expandedColumns.value) {
     let maxLength = column?.length ?? 0;
-    for (const row of samples) {
+    for (const row of rows.value) {
       const value = row.properties[column];
       const length = getFormattedLength(value);
       if (length > maxLength) maxLength = length;
+      if (Math.round(maxLength * EST_CHAR_PX + CELL_HORIZONTAL_PADDING) >= MAX_EXPANDED_WIDTH) {
+        maxLength = Math.ceil((MAX_EXPANDED_WIDTH - CELL_HORIZONTAL_PADDING) / EST_CHAR_PX);
+        break;
+      }
     }
     const estimatedWidth = Math.max(
       MIN_COLUMN_WIDTH,
-      Math.min(MAX_EXPANDED_WIDTH, Math.round(maxLength * EST_CHAR_PX + CELL_HORIZONTAL_PADDING)),
+      Math.min(
+        MAX_EXPANDED_WIDTH,
+        Math.round(maxLength * EST_CHAR_PX + CELL_HORIZONTAL_PADDING),
+      ),
     );
     widths.set(column, estimatedWidth);
   }
@@ -366,7 +369,7 @@ watch(
 .data-grid__header-row,
 .data-grid__row {
   display: grid;
-  grid-template-columns: minmax(48px, 0.12fr) repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: minmax(48px, 0.12fr) repeat(auto-fit, minmax(120px, 1fr));
   gap: 0;
   align-items: stretch;
   box-sizing: border-box;
