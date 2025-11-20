@@ -13,7 +13,8 @@ import type {
   EncodingOption,
 } from "../types";
 
-const ROW_HEIGHT = 34;
+const ROW_HEIGHT = 35;
+const HEADER_HEIGHT = ROW_HEIGHT;
 const BUFFER_ROWS = 6;
 const DEFAULT_HEIGHT = 360;
 
@@ -32,11 +33,9 @@ const emit = defineEmits<{
 }>();
 
 const viewportRef = ref<HTMLElement | null>(null);
-const headerScrollRef = ref<HTMLElement | null>(null);
 const scrollTop = ref(0);
 const viewportHeight = ref(DEFAULT_HEIGHT);
 let resizeObserver: ResizeObserver | null = null;
-let suppressScrollSync = false;
 
 const rows = computed(() => {
   const features = props.collection?.features ?? [];
@@ -61,27 +60,21 @@ const rowTemplate = computed(() => {
   return ["minmax(48px, 0.12fr)", ...dynamicColumns].join(" ");
 });
 
-const encodingHint = computed(() => {
-  if (props.detectedEncoding) {
-    return `CPG에서 ${props.detectedEncoding.toUpperCase()} 감지`;
-  }
-  if (props.hasCpg) {
-    return "CPG 파일 존재 · 기본값 사용";
-  }
-  return "CPG 없음 · 직접 선택하세요";
-});
-
 const totalRows = computed(() => rows.value.length);
 const totalHeight = computed(() => totalRows.value * ROW_HEIGHT);
 
 const startIndex = computed(() =>
-  Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT)),
+  Math.max(0, Math.floor(effectiveScrollTop.value / ROW_HEIGHT)),
 );
 
 const endIndex = computed(() =>
   Math.min(
     totalRows.value,
-    startIndex.value + Math.ceil(viewportHeight.value / ROW_HEIGHT) + BUFFER_ROWS,
+    startIndex.value +
+      Math.ceil(
+        Math.max(0, viewportHeight.value - HEADER_HEIGHT) / ROW_HEIGHT,
+      ) +
+      BUFFER_ROWS,
   ),
 );
 
@@ -99,23 +92,18 @@ const idIndexMap = computed(() => {
   return map;
 });
 
+const effectiveScrollTop = computed(() =>
+  Math.max(0, scrollTop.value - HEADER_HEIGHT),
+);
+
 const handleScroll = () => {
   const viewport = viewportRef.value;
   if (!viewport) return;
   scrollTop.value = viewport.scrollTop;
-  syncHeaderScrollFromBody();
 };
 
 const handleRowClick = (rowId: FeatureId) => {
   emit("select", rowId);
-};
-
-const handleHeaderScroll = () => {
-  if (!headerScrollRef.value || !viewportRef.value) return;
-  if (suppressScrollSync) return;
-  suppressScrollSync = true;
-  viewportRef.value.scrollLeft = headerScrollRef.value.scrollLeft;
-  suppressScrollSync = false;
 };
 
 const ensureRowVisible = (rowId: FeatureId | null) => {
@@ -126,10 +114,13 @@ const ensureRowVisible = (rowId: FeatureId | null) => {
   if (index === undefined) return;
   const top = index * ROW_HEIGHT;
   const bottom = top + ROW_HEIGHT;
-  if (top < viewport.scrollTop) {
-    viewport.scrollTop = top;
-  } else if (bottom > viewport.scrollTop + viewport.clientHeight) {
-    viewport.scrollTop = bottom - viewport.clientHeight;
+  if (top < effectiveScrollTop.value) {
+    viewport.scrollTop = top + HEADER_HEIGHT;
+  } else if (
+    bottom >
+    effectiveScrollTop.value + viewport.clientHeight - HEADER_HEIGHT
+  ) {
+    viewport.scrollTop = bottom - viewport.clientHeight + HEADER_HEIGHT;
   }
 };
 
@@ -153,24 +144,20 @@ const setEncoding = (value: EncodingOption) => {
   emit("change-encoding", value);
 };
 
-const syncHeaderScrollFromBody = () => {
-  if (!headerScrollRef.value || !viewportRef.value) return;
-  if (suppressScrollSync) return;
-  if (headerScrollRef.value.scrollLeft === viewportRef.value.scrollLeft) return;
-  suppressScrollSync = true;
-  headerScrollRef.value.scrollLeft = viewportRef.value.scrollLeft;
-  suppressScrollSync = false;
-};
-
-onMounted(() => {
+const setupResizeObserver = () => {
   const viewport = viewportRef.value;
   if (!viewport) return;
   viewportHeight.value = viewport.clientHeight || DEFAULT_HEIGHT;
+  if (resizeObserver) return;
   resizeObserver = new ResizeObserver(() => {
     if (!viewportRef.value) return;
     viewportHeight.value = viewportRef.value.clientHeight || DEFAULT_HEIGHT;
   });
   resizeObserver.observe(viewport);
+};
+
+onMounted(() => {
+  setupResizeObserver();
 });
 
 onBeforeUnmount(() => {
@@ -192,27 +179,21 @@ watch(
     if (!viewport) return;
     viewport.scrollTop = 0;
     scrollTop.value = 0;
-    syncHeaderScrollFromBody();
+    setupResizeObserver();
   },
+  { flush: "post" },
 );
 </script>
 
 <template>
-  <section class="data-grid" v-if="rows.length">
-    <div class="columns-header">
-      <h3>DB 테이블</h3>
-      <small>{{ totalRows.toLocaleString() }}행 · 가상 스크롤</small>
-    </div>
-
-    <div class="encoding-controls">
-      <div>
-        <p class="label">DBF 인코딩</p>
-        <small>{{ encodingHint }}</small>
-      </div>
-      <div class="toggle-group">
-        <button
-          type="button"
-          class="toggle"
+  <section class="data-grid" :class="{ 'data-grid--empty': !rows.length }">
+    <div class="columns-header columns-header--with-action">
+      <div class="columns-header__row">
+        <h3>DB 테이블</h3>
+        <div class="toggle-group">
+          <button
+            type="button"
+            class="toggle"
           :class="{ 'toggle--active': props.encoding === 'utf-8' }"
           @click="setEncoding('utf-8')"
         >
@@ -229,85 +210,67 @@ watch(
         <button
           type="button"
           class="toggle"
-          :class="{ 'toggle--active': props.encoding === 'euc-kr' }"
-          @click="setEncoding('euc-kr')"
-        >
-          EUC-KR
-        </button>
-      </div>
-    </div>
-
-    <div
-      ref="headerScrollRef"
-      class="data-grid__header-scroll"
-      @scroll="handleHeaderScroll"
-    >
-      <div
-        class="data-grid__header-row"
-        :style="{ gridTemplateColumns: rowTemplate }"
-      >
-        <span class="data-grid__cell data-grid__cell--head data-grid__cell--id">
-          #
-        </span>
-        <span
-          v-for="column in columnOrder"
-          :key="column"
-          class="data-grid__cell data-grid__cell--head"
-        >
-          {{ column || "(이름 없음)" }}
-        </span>
-      </div>
-    </div>
-
-    <div
-      ref="viewportRef"
-      class="data-grid__viewport"
-      @scroll="handleScroll"
-    >
-      <div
-        class="data-grid__spacer"
-        :style="{ height: `${totalHeight}px` }"
-      >
-        <div
-          class="data-grid__virtual"
-          :style="{ transform: `translateY(${translateY}px)` }"
-        >
-          <button
-          v-for="(row, localIndex) in visibleRows"
-          :key="row.id"
-          type="button"
-          class="data-grid__row"
-          :class="{
-            'data-grid__row--selected': props.selectedId === row.id,
-          }"
-          :style="{ gridTemplateColumns: rowTemplate }"
-          @click="handleRowClick(row.id)"
-        >
-            <span class="data-grid__cell data-grid__cell--id">
-              {{ startIndex + localIndex + 1 }}
-            </span>
-            <span
-              v-for="column in columnOrder"
-              :key="`${row.id}-${column}`"
-              class="data-grid__cell"
-              :title="formatCellValue(row.properties[column])"
-            >
-              {{ formatCellValue(row.properties[column]) }}
-            </span>
+            :class="{ 'toggle--active': props.encoding === 'euc-kr' }"
+            @click="setEncoding('euc-kr')"
+          >
+            EUC-KR
           </button>
         </div>
       </div>
+      <small>{{ rows.length ? `${totalRows.toLocaleString()}행 · 가상 스크롤` : "표시할 행이 없습니다." }}</small>
     </div>
-  </section>
 
-  <section v-else class="data-grid data-grid--empty">
-    <div class="columns-header">
-      <h3>DB 테이블</h3>
-      <small>표시할 행이 없습니다.</small>
+    <div v-if="rows.length" ref="viewportRef" class="data-grid__viewport" @scroll="handleScroll">
+        <div
+          class="data-grid__header-row"
+          :style="{ gridTemplateColumns: rowTemplate }"
+        >
+          <span class="data-grid__cell data-grid__cell--head data-grid__cell--id">
+            #
+          </span>
+          <span
+            v-for="column in columnOrder"
+            :key="column"
+            class="data-grid__cell data-grid__cell--head"
+          >
+            {{ column || "(이름 없음)" }}
+          </span>
+        </div>
+        <div class="data-grid__spacer" :style="{ height: `${totalHeight}px` }">
+          <div class="data-grid__virtual" :style="{ transform: `translateY(${translateY}px)` }">
+            <button
+              v-for="(row, localIndex) in visibleRows"
+              :key="row.id"
+              type="button"
+              class="data-grid__row"
+              :class="{
+                'data-grid__row--selected': props.selectedId === row.id,
+                'data-grid__row--striped': (startIndex + localIndex) % 2 === 1,
+              }"
+              :style="{ gridTemplateColumns: rowTemplate }"
+              @click="handleRowClick(row.id)"
+            >
+              <span class="data-grid__cell data-grid__cell--id">
+                {{ startIndex + localIndex + 1 }}
+              </span>
+              <span
+                v-for="column in columnOrder"
+                :key="`${row.id}-${column}`"
+                class="data-grid__cell"
+                :title="formatCellValue(row.properties[column])"
+              >
+                {{ formatCellValue(row.properties[column]) }}
+              </span>
+            </button>
+          </div>
+        </div>
     </div>
-    <p class="data-grid__placeholder">
-      ZIP을 로드하면 속성 테이블이 이곳에 나타납니다.
-    </p>
+
+    <div v-else class="data-grid__empty-state">
+      <p class="data-grid__placeholder">
+        ZIP을 로드하면 속성 테이블이 이곳에 나타납니다.
+      </p>
+    </div>
   </section>
 </template>
 
@@ -320,53 +283,72 @@ watch(
   flex-direction: column;
   gap: 12px;
   background: #fff;
+  margin-bottom: 16px;
 }
 
 .data-grid__header-row,
 .data-grid__row {
   display: grid;
   grid-template-columns: minmax(48px, 0.12fr) repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-  align-items: center;
-}
-
-.data-grid__header-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  margin-bottom: 6px;
-}
-
-.data-grid__header-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.data-grid__header-scroll {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  gap: 0;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: 35px;
 }
 
 .data-grid__cell {
   font-size: 12px;
+  line-height: 16px;
   color: #1f2937;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  border-right: 1px solid #e5e7eb;
+  background: transparent;
 }
 
 .data-grid__cell--head {
   font-weight: 600;
-  color: #4b5563;
+  color: #374151;
+  background: transparent;
+}
+
+.data-grid__header-row .data-grid__cell {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.data-grid__header-row {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .data-grid__cell--id {
   text-align: center;
+  font-weight: 600;
+  color: #0f172a;
+  justify-content: center;
+}
+
+.data-grid__row .data-grid__cell:last-child,
+.data-grid__header-row .data-grid__cell:last-child {
+  border-right: none;
 }
 
 .data-grid__viewport {
   overflow: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
   max-height: 420px;
+  background: #fff;
+  scrollbar-gutter: stable;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
 }
 
 .data-grid__spacer {
@@ -381,10 +363,15 @@ watch(
 
 .data-grid__row {
   border: none;
-  background: transparent;
-  padding: 6px 8px;
-  border-bottom: 1px solid #f3f4f6;
+  background: #fff;
+  padding: 0;
   text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.data-grid__row--striped {
+  background: #f9fafb;
 }
 
 .data-grid__row:last-child {
@@ -392,16 +379,15 @@ watch(
 }
 
 .data-grid__row:hover {
-  background: rgba(37, 99, 235, 0.08);
+  background: #eef2ff;
 }
 
 .data-grid__row--selected {
-  background: rgba(14, 165, 233, 0.15);
-  border-left: 3px solid #0ea5e9;
+  background: #dbeafe;
 }
 
 .data-grid--empty {
-  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 .data-grid__placeholder {
@@ -410,16 +396,37 @@ watch(
   font-size: 13px;
 }
 
-.encoding-controls {
+.data-grid__empty-state {
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 32px;
+  text-align: center;
+  background: #f9fafb;
+}
+
+.data-grid__empty-state p {
+  margin: 0;
+}
+
+.columns-header--with-action {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.columns-header__row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
-.encoding-controls small {
-  display: block;
-  margin-top: 4px;
-  color: #6b7280;
+.columns-header__row h3 {
+  margin: 0;
 }
+
+.columns-header--with-action .toggle-group {
+  margin-left: auto;
+}
+
 </style>
