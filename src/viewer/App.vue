@@ -45,6 +45,7 @@ const result = ref<ViewerResult | null>(null);
 const zipInspection = ref<ZipInspection | null>(null);
 const encoding = ref<EncodingOption>("utf-8");
 const encodingChanging = ref(false);
+const sridChanging = ref(false);
 const srid = ref<SridCode | null>(null);
 type SridMode = "file" | "manual";
 const sridMode = ref<SridMode>("file");
@@ -447,7 +448,9 @@ const resetViewer = () => {
   result.value = null;
   srid.value = null;
   sridMode.value = "file";
+  sridChanging.value = false;
   encoding.value = "utf-8";
+  encodingChanging.value = false;
   currentFileName.value = "";
   currentCollection.value = null;
   hasParsedOnce.value = false;
@@ -759,13 +762,6 @@ const summarizeCollection = (
   };
 };
 
-const statusMessage = computed(() => {
-  if (isLoading.value) return "ZIP을 해석하는 중입니다…";
-  if (errorMessage.value) return errorMessage.value;
-  if (result.value) return `${result.value.fileName} 분석 완료`;
-  return "Shapefile ZIP을 드래그하거나 선택하세요.";
-});
-
 const runParse = async (
   buffer: ArrayBuffer,
   options?: { manageLoading?: boolean },
@@ -812,10 +808,6 @@ const runParse = async (
       currentFileName.value ||
       zipInspection.value?.layers[0]?.name ||
       "파일";
-    parseProgress.value = {
-      label: "결과 요약 중",
-      percent: 98,
-    };
     result.value = summarizeCollection(workingCollection, summaryName);
     errorMessage.value = "";
     const selectionSource = workingCollection;
@@ -839,7 +831,6 @@ const runParse = async (
     ) {
       openLargeModal("feature");
     }
-    parseProgress.value = null;
     hasParsedOnce.value = true;
     logDebug("runParse:complete", {
       jobId,
@@ -851,7 +842,6 @@ const runParse = async (
     console.error("[gongmiri] worker parse error", err);
     errorMessage.value = "파싱 워커에서 오류가 발생했습니다.";
     result.value = null;
-    parseProgress.value = null;
     logWarn("runParse:error", err);
   } finally {
     if (manageLoading && jobId === parseRunId) {
@@ -1015,7 +1005,12 @@ const confirmSridSelection = async () => {
   }
   sridMode.value = "manual";
   sridModalVisible.value = false;
-  await runParse(sourceBuffer.value);
+  sridChanging.value = true;
+  try {
+    await runParse(sourceBuffer.value);
+  } finally {
+    sridChanging.value = false;
+  }
 };
 
 watch(
@@ -1048,19 +1043,29 @@ watch(
   },
 );
 
-watch(srid, (next, prev) => {
+watch(srid, async (next, prev) => {
   if (!hasParsedOnce.value) return;
   if (next === prev) return;
   const shouldOverride =
     sridMode.value === "manual" || !zipInspection.value?.hasPrj;
   if (!shouldOverride) return;
-  triggerReparse();
+  sridChanging.value = true;
+  try {
+    await triggerReparse();
+  } finally {
+    sridChanging.value = false;
+  }
 });
 
-watch(sridMode, (mode, prev) => {
+watch(sridMode, async (mode, prev) => {
   if (!hasParsedOnce.value) return;
   if (mode === prev) return;
-  triggerReparse();
+  sridChanging.value = true;
+  try {
+    await triggerReparse();
+  } finally {
+    sridChanging.value = false;
+  }
 });
 
 const handleSridUpdate = (next: SridCode) => {
@@ -1097,7 +1102,6 @@ watch(
     <header class="header">
       <div class="header-meta">
         <h2>공미리 — 공간데이터 미리보기</h2>
-        <p>{{ statusMessage }}</p>
       </div>
       <button
         v-if="hasFileLoaded"
@@ -1121,7 +1125,7 @@ watch(
         />
 
         <ParseProgressBar
-          v-if="parseProgress"
+          v-if="parseProgress && !hasFileLoaded"
           :progress="parseProgress"
         />
 
@@ -1161,6 +1165,7 @@ watch(
           :numeric-legend="numericLegend"
           :size-legend="sizeLegend"
           :has-point-geometry="hasPointGeometry"
+          :srid-changing="sridChanging"
           @update:srid="handleSridUpdate"
           @use-file-projection="resetToFileProjection"
           @feature-focus="handleFeatureFocusFromMap"
