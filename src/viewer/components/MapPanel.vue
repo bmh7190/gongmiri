@@ -46,6 +46,7 @@ const props = defineProps<{
   numericLegend: NumericLegendEntry[];
   sizeLegend: SizeLegend;
   hasPointGeometry: boolean;
+  sridChanging?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -1079,6 +1080,12 @@ watch(hasFeatures, (present) => {
     </div>
     <div class="map-panel__canvas">
       <div ref="mapContainer" class="map-panel__map" />
+      <div v-if="props.sridChanging" class="map-panel__overlay">
+        <div class="map-panel__overlay-content">
+          <span class="map-panel__spinner" aria-hidden="true"></span>
+          <span>좌표계 적용 중…</span>
+        </div>
+      </div>
       <div v-if="!hasFeatures" class="map-panel__empty">
         <p>표시할 피처가 없습니다.</p>
       </div>
@@ -1277,6 +1284,45 @@ watch(hasFeatures, (present) => {
   width: 100%;
   height: 360px;
   border-radius: 12px;
+}
+
+.map-panel__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.map-panel__overlay-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  font-family: "Pretendard SemiBold", system-ui, sans-serif;
+}
+
+.map-panel__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: map-panel-spin 0.9s linear infinite;
+}
+
+@keyframes map-panel-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 :deep(.map-panel__map .maplibregl-canvas-container) {
