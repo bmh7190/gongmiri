@@ -45,8 +45,14 @@ const densityColumns = computed(() => props.result.columns);
       >
         <div class="density-header">
           <strong>{{ col.name || "(이름 없음)" }}</strong>
-          <span>{{ formatPercent(col.fillRate) }}</span>
+          <span class="density-type">{{ formatDataType(col.dataType) }}</span>
         </div>
+        <p class="density-meta density-meta--top">
+          <span>{{ formatPercent(col.fillRate) }}</span>
+          <span v-if="col.uniqueRatio !== null">
+            고유 {{ formatRatioPercent(col.uniqueRatio) }}
+          </span>
+        </p>
         <div class="density-bar">
           <div
             class="density-bar__fill"
@@ -57,19 +63,9 @@ const densityColumns = computed(() => props.result.columns);
             :style="{ width: `${col.fillRate}%` }"
           />
         </div>
-        <p class="density-meta density-meta--top">
-          <span>{{ formatDataType(col.dataType) }}</span>
-          <span>NULL {{ col.empty }}</span>
-          <span v-if="col.uniqueRatio !== null">고유 {{ formatRatioPercent(col.uniqueRatio) }}</span>
-        </p>
-        <p class="density-meta">
+        <p class="density-meta density-meta--counts">
           <span>채움 {{ col.filled }}</span>
           <span>빈 값 {{ col.empty }}</span>
-        </p>
-        <p v-if="col.numericSummary" class="density-stats">
-          <span>min {{ col.numericSummary.min.toFixed(2) }}</span>
-          <span>max {{ col.numericSummary.max.toFixed(2) }}</span>
-          <span>mean {{ col.numericSummary.mean.toFixed(2) }}</span>
         </p>
       </article>
     </div>
@@ -89,9 +85,17 @@ const densityColumns = computed(() => props.result.columns);
 }
 
 .density-grid {
+  --density-card-height: 115px;
+  --density-card-gap: 12px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  grid-auto-rows: minmax(var(--density-card-height), auto);
+  gap: var(--density-card-gap);
+  height: calc(
+    (var(--density-card-height) + var(--density-card-gap)) * 3 - var(--density-card-gap)
+  );
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .density-card {
@@ -108,6 +112,11 @@ const densityColumns = computed(() => props.result.columns);
   justify-content: space-between;
   font-size: 13px;
   color: #111827;
+}
+
+.density-type {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .density-bar {
@@ -143,11 +152,7 @@ const densityColumns = computed(() => props.result.columns);
   font-weight: 600;
 }
 
-.density-stats {
-  margin: 0;
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  color: #4b5563;
+.density-meta--counts {
+  font-weight: 600;
 }
 </style>
