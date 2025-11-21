@@ -399,7 +399,6 @@ const showPopup = (feature: MapGeoJSONFeature, position: LngLatLike) => {
     closeButton: true,
     closeOnMove: false,
     offset: 12,
-    maxWidth: "280px",
     anchor: "center",
   })
     .setLngLat(position)
@@ -412,7 +411,6 @@ const buildPopupHtml = (feature: MapGeoJSONFeature): string => {
   const props = feature.properties ?? {};
   const rows = Object.entries(props)
     .filter(([, value]) => value !== null && value !== undefined && value !== "")
-    .slice(0, 6)
     .map(([key, value]) => {
       const safeKey = escapeHtml(key);
       const safeValue = escapeHtml(formatValue(value));
@@ -433,7 +431,9 @@ const buildPopupHtml = (feature: MapGeoJSONFeature): string => {
       ${rows
         ? `
           <div class="map-popup__rows">
-            ${rows}
+            <div class="map-popup__rows-table">
+              ${rows}
+            </div>
           </div>
         `
         : '<div class="map-popup__empty">표시할 속성이 없습니다</div>'}
@@ -1407,6 +1407,9 @@ watch(hasFeatures, (present) => {
 }
 
 :global(.map-popup) {
+  display: inline-block;
+  width: fit-content;
+  max-width: 520px;
   font-size: 12px;
   background: #fff;
   border-radius: 8px;
@@ -1435,10 +1438,16 @@ watch(hasFeatures, (present) => {
 }
 
 :global(.map-popup__rows) {
-  display: table;
-  width: 100%;
-  border-spacing: 0;
   padding: 2px 0 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+:global(.map-popup__rows-table) {
+  display: table;
+  width: auto;
+  max-width: 520px;
+  border-spacing: 0;
 }
 
 :global(.popup-row) {
@@ -1462,6 +1471,10 @@ watch(hasFeatures, (present) => {
   color: #111827;
   line-height: 1.45;
   word-break: break-word;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 360px;
   padding: 4px 8px;
 }
 
