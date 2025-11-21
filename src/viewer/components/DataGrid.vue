@@ -6,6 +6,7 @@ import {
   ref,
   watch,
 } from "vue";
+import { measureTextWidth } from "../utils/text-measure";
 import type {
   ColumnStat,
   FeatureCollectionGeometry,
@@ -17,11 +18,9 @@ const ROW_HEIGHT = 30;
 const HEADER_HEIGHT = ROW_HEIGHT;
 const BUFFER_ROWS = 6;
 const DEFAULT_HEIGHT = 360;
-const MIN_COLUMN_WIDTH = 120;
+const MIN_COLUMN_WIDTH = 0;
 const MIN_ID_COLUMN_WIDTH = 44;
-const MAX_EXPANDED_WIDTH = 900;
-const EST_CHAR_PX = 7;
-const CELL_HORIZONTAL_PADDING = 24;
+const CELL_HORIZONTAL_PADDING = 14;
 
 const props = defineProps<{
   collection: FeatureCollectionGeometry | null;
@@ -43,8 +42,6 @@ const scrollTop = ref(0);
 const viewportHeight = ref(DEFAULT_HEIGHT);
 let resizeObserver: ResizeObserver | null = null;
 
-const expandedColumns = ref<Set<string>>(new Set());
-
 const rows = computed(() => {
   const features = props.collection?.features ?? [];
   return features.map((feature, index) => ({
@@ -61,44 +58,33 @@ const columnOrder = computed(() => {
   return Object.keys(firstRow);
 });
 
-const estimatedExpandedWidths = computed(() => {
+const columnWidths = computed(() => {
   const widths = new Map<string, number>();
-  if (!expandedColumns.value.size) return widths;
-
-  for (const column of expandedColumns.value) {
-    let maxLength = column?.length ?? 0;
-    for (const row of rows.value) {
-      const value = row.properties[column];
-      const length = getFormattedLength(value);
-      if (length > maxLength) maxLength = length;
-      if (Math.round(maxLength * EST_CHAR_PX + CELL_HORIZONTAL_PADDING) >= MAX_EXPANDED_WIDTH) {
-        maxLength = Math.ceil((MAX_EXPANDED_WIDTH - CELL_HORIZONTAL_PADDING) / EST_CHAR_PX);
-        break;
-      }
-    }
-    const estimatedWidth = Math.max(
-      MIN_COLUMN_WIDTH,
-      Math.min(
-        MAX_EXPANDED_WIDTH,
-        Math.round(maxLength * EST_CHAR_PX + CELL_HORIZONTAL_PADDING),
-      ),
-    );
-    widths.set(column, estimatedWidth);
+  if (!columnOrder.value.length) return widths;
+  for (const column of columnOrder.value) {
+    const values = rows.value.map((row) => row.properties?.[column]);
+    const maxWidth = measureMaxWidth([column, ...values]);
+    widths.set(column, Math.max(MIN_COLUMN_WIDTH, Math.ceil(maxWidth + CELL_HORIZONTAL_PADDING)));
   }
 
   return widths;
 });
 
+const idColumnWidth = computed(() => {
+  const maxIndexLabel = rows.value.length
+    ? String(rows.value.length)
+    : "0";
+  const measured = measureTextWidth(maxIndexLabel);
+  return Math.max(MIN_ID_COLUMN_WIDTH, Math.ceil(measured + CELL_HORIZONTAL_PADDING));
+});
+
 const rowTemplate = computed(() => {
-  const expanded = expandedColumns.value;
   const dynamicColumns = columnOrder.value.length
     ? columnOrder.value.map((name) =>
-      expanded.has(name)
-        ? `${estimatedExpandedWidths.value.get(name) ?? MIN_COLUMN_WIDTH}px`
-        : `minmax(${MIN_COLUMN_WIDTH}px, 1fr)`,
+      `${columnWidths.value.get(name) ?? MIN_COLUMN_WIDTH}px`,
     )
     : [`minmax(${MIN_COLUMN_WIDTH}px, 1fr)`];
-  return [`minmax(${MIN_ID_COLUMN_WIDTH}px, max-content)`, ...dynamicColumns].join(" ");
+  return [`${idColumnWidth.value}px`, ...dynamicColumns].join(" ");
 });
 
 const totalRows = computed(() => rows.value.length);
@@ -147,38 +133,6 @@ const handleRowClick = (rowId: FeatureId) => {
   emit("select", rowId);
 };
 
-const handleCellClick = (column: string, rowId: FeatureId) => {
-  toggleColumnWidth(column);
-  handleRowClick(rowId);
-};
-
-const getFormattedLength = (value: unknown): number => {
-  if (value === null || value === undefined) return 1;
-  if (typeof value === "number") {
-    const formatted = Number.isInteger(value) ? value.toString() : value.toFixed(3);
-    return formatted.length;
-  }
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value).length;
-    } catch {
-      return "[object]".length;
-    }
-  }
-  return String(value).length;
-};
-
-const toggleColumnWidth = (column: string) => {
-  if (!column) return;
-  const next = new Set(expandedColumns.value);
-  if (next.has(column)) {
-    next.delete(column);
-  } else {
-    next.add(column);
-  }
-  expandedColumns.value = next;
-};
-
 const ensureRowVisible = (rowId: FeatureId | null) => {
   if (!rowId) return;
   const viewport = viewportRef.value;
@@ -215,6 +169,31 @@ const formatCellValue = (value: unknown): string => {
 const setEncoding = (value: EncodingOption) => {
   if (props.encoding === value) return;
   emit("change-encoding", value);
+};
+
+const stringifyValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? value.toString() : value.toFixed(3);
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "[object]";
+    }
+  }
+  return String(value);
+};
+
+const measureMaxWidth = (values: unknown[]): number => {
+  let max = 0;
+  for (const value of values) {
+    const text = stringifyValue(value);
+    const width = measureTextWidth(text);
+    if (width > max) max = width;
+  }
+  return max;
 };
 
 const setupResizeObserver = () => {
@@ -307,12 +286,6 @@ watch(
               v-for="column in columnOrder"
               :key="column"
               class="data-grid__cell data-grid__cell--head"
-              :class="{ 'data-grid__cell--head-expanded': expandedColumns.has(column) }"
-              @click="toggleColumnWidth(column)"
-              @keydown.enter.prevent="toggleColumnWidth(column)"
-              @keydown.space.prevent="toggleColumnWidth(column)"
-              role="button"
-              tabindex="0"
             >
               {{ column || "(이름 없음)" }}
             </span>
@@ -338,7 +311,6 @@ watch(
                   v-for="column in columnOrder"
                   :key="`${row.id}-${column}`"
                   class="data-grid__cell"
-                  @click.stop="handleCellClick(column, row.id)"
                   :title="formatCellValue(row.properties[column])"
                 >
                   {{ formatCellValue(row.properties[column]) }}
@@ -392,7 +364,7 @@ watch(
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  padding: 7px 12px;
+  padding: 7px 7px;
   display: flex;
   align-items: center;
   box-sizing: border-box;
@@ -404,18 +376,12 @@ watch(
   font-weight: 600;
   color: #374151;
   background: transparent;
-  cursor: pointer;
-  user-select: none;
 }
 
 .data-grid__header-row .data-grid__cell {
   background: #f8fafc;
   font-weight: 600;
   color: #374151;
-}
-
-.data-grid__cell--head-expanded {
-  background: #e5e7eb;
 }
 
 .data-grid__header-row {
@@ -433,9 +399,14 @@ watch(
   justify-content: center;
 }
 
+.data-grid__header-row .data-grid__cell--id,
+.data-grid__row .data-grid__cell--id {
+  background: #f8fafc;
+}
+
 .data-grid__row .data-grid__cell:last-child,
 .data-grid__header-row .data-grid__cell:last-child {
-  border-right: none;
+  border-right: 1px solid #e5e7eb;
 }
 
 .data-grid__viewport {
