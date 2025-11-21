@@ -725,10 +725,12 @@ const toggleSridPanel = () => {
 };
 
 const handleSridChange = (code: SridCode) => {
+  showSridPanel.value = false;
   emit("update:srid", code);
 };
 
 const handleUseFileProjection = () => {
+  showSridPanel.value = false;
   emit("use-file-projection");
 };
 
