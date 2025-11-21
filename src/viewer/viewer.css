@@ -37,8 +37,8 @@
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
 }
 
 .header-meta h2 {
@@ -298,7 +298,7 @@
 }
 
 .reset-button {
-  align-self: flex-start;
+  align-self: center;
   border: none;
   background: #111827;
   color: #fff;
@@ -312,5 +312,5 @@
 }
 
 .reset-button--header {
-  margin-top: 4px;
+  margin-top: 0;
 }
