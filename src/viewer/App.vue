@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch, onBeforeUnmount } from "vue";
+import { computed, ref, shallowRef, watch, onBeforeUnmount, nextTick } from "vue";
 import { iter } from "but-unzip";
 import DropZone from "./components/DropZone.vue";
 import ZipInspectionPanel from "./components/ZipInspectionPanel.vue";
@@ -1008,6 +1008,7 @@ const confirmSridSelection = async () => {
   sridChanging.value = true;
   try {
     await runParse(sourceBuffer.value);
+    await nextTick();
   } finally {
     sridChanging.value = false;
   }
@@ -1052,6 +1053,7 @@ watch(srid, async (next, prev) => {
   sridChanging.value = true;
   try {
     await triggerReparse();
+    await nextTick();
   } finally {
     sridChanging.value = false;
   }
@@ -1063,6 +1065,7 @@ watch(sridMode, async (mode, prev) => {
   sridChanging.value = true;
   try {
     await triggerReparse();
+    await nextTick();
   } finally {
     sridChanging.value = false;
   }
@@ -1101,7 +1104,7 @@ watch(
   <div class="popup-container">
     <header class="header">
       <div class="header-meta">
-        <h2>공미리 — 공간데이터 미리보기</h2>
+        <h2>공간데이터 미리보기</h2>
       </div>
       <button
         v-if="hasFileLoaded"
