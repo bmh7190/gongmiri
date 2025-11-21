@@ -91,7 +91,7 @@ const densityColumns = computed(() => props.result.columns);
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   grid-auto-rows: minmax(var(--density-card-height), auto);
   gap: var(--density-card-gap);
-  height: calc(
+  max-height: calc(
     (var(--density-card-height) + var(--density-card-gap)) * 3 - var(--density-card-gap)
   );
   overflow-y: auto;
