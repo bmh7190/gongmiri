@@ -362,7 +362,7 @@ const panelClasses = computed(() => ({
 .viz-block {
   border: 1px solid #f3f4f6;
   border-radius: 12px;
-  padding: 12px;
+  padding: 0 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -374,6 +374,7 @@ const panelClasses = computed(() => ({
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  min-height: 22px;
 }
 
 .viz-block__header--embedded {
