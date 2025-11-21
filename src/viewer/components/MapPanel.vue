@@ -417,10 +417,10 @@ const buildPopupHtml = (feature: MapGeoJSONFeature): string => {
       const safeKey = escapeHtml(key);
       const safeValue = escapeHtml(formatValue(value));
       return `
-        <tr class="popup-row">
-          <th scope="row" class="popup-row__label">${safeKey}</th>
-          <td class="popup-row__value">${safeValue}</td>
-        </tr>
+        <div class="popup-row">
+          <span class="popup-row__label">${safeKey}</span>
+          <span class="popup-row__value">${safeValue}</span>
+        </div>
       `;
     })
     .join("");
@@ -432,16 +432,8 @@ const buildPopupHtml = (feature: MapGeoJSONFeature): string => {
       </header>
       ${rows
         ? `
-          <div class="map-popup__table-wrapper">
-            <table class="popup-table">
-              <colgroup>
-                <col class="popup-table__col popup-table__col--key" />
-                <col class="popup-table__col popup-table__col--value" />
-              </colgroup>
-              <tbody>
-                ${rows}
-              </tbody>
-            </table>
+          <div class="map-popup__rows">
+            ${rows}
           </div>
         `
         : '<div class="map-popup__empty">표시할 속성이 없습니다</div>'}
@@ -1414,88 +1406,85 @@ watch(hasFeatures, (present) => {
   opacity: 0;
 }
 
-.map-popup {
+:global(.map-popup) {
   font-size: 12px;
-  min-width: 320px;
-  max-width: 440px;
   background: #fff;
-  border-radius: 12px;
-  box-shadow:
-    0 24px 55px rgba(15, 23, 42, 0.18),
-    0 8px 18px rgba(15, 23, 42, 0.16);
-  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
   overflow: hidden;
 }
 
-.map-popup__header {
-  padding: 10px 14px;
-  border-bottom: 1px solid #e2e8f0;
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.12));
+:global(.map-popup__header) {
+  padding: 8px 9px 6px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.map-popup__header h4 {
+:global(.map-popup__header h4) {
   margin: 0;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #0f172a;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #111827;
 }
 
-.map-popup__table-wrapper {
-  background: #fff;
-}
-
-.map-popup__empty {
-  color: #94a3b8;
+:global(.map-popup__empty) {
+  color: #6b7280;
   text-align: center;
-  padding: 16px;
+  padding: 10px;
 }
 
-.popup-table {
+:global(.map-popup__rows) {
+  display: table;
   width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
+  border-spacing: 0;
+  padding: 2px 0 6px;
 }
 
-.popup-table__col--key {
-  width: 40%;
+:global(.popup-row) {
+  display: table-row;
 }
 
-.popup-table__col--value {
-  width: 60%;
-}
-
-.popup-table tbody tr {
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.popup-table tbody tr:nth-child(odd) {
-  background: #f8fafc;
-}
-
-.popup-table tbody tr:last-child {
-  border-bottom: none;
-}
-
-.popup-row__label,
-.popup-row__value {
-  padding: 10px 14px;
-  vertical-align: top;
-}
-
-.popup-row__label {
+:global(.popup-row__label) {
+  display: table-cell;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #475569;
+  color: #374151;
+  word-break: break-word;
+  border-right: 1px solid #eef2f7;
+  padding: 4px 8px;
+  white-space: nowrap;
 }
 
-.popup-row__value {
+:global(.popup-row__value) {
+  display: table-cell;
   font-size: 12px;
-  color: #0f172a;
-  line-height: 1.5;
+  color: #111827;
+  line-height: 1.45;
   word-break: break-word;
+  padding: 4px 8px;
+}
+
+:global(.popup-row + .popup-row .popup-row__label),
+:global(.popup-row + .popup-row .popup-row__value) {
+  border-top: 1px solid #f5f5f5;
+}
+
+:global(.maplibregl-popup-content) {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:global(.maplibregl-popup-tip) {
+  display: none;
+}
+
+:global(.maplibregl-popup-close-button) {
+  width: 22px;
+  height: 22px;
+  font-size: 18px;
+  line-height: 20px;
+  margin: 6px 6px 0 0;
 }
 </style>
