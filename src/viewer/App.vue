@@ -1119,7 +1119,7 @@ watch(
     <div class="content-grid">
       <div class="panel-stack panel-stack--left">
         <DropZone
-          v-if="!hasFileLoaded"
+          v-if="!hasFileLoaded && !parseProgress"
           :is-dragging="isDragging"
           :is-loading="isLoading"
           @drop-file="onDrop"
@@ -1203,11 +1203,11 @@ watch(
 
         <div v-else-if="!result" class="placeholder-card">
           <h3>ZIP 파일을 드롭해 보세요</h3>
-          <p>다운로드한 Shapefile ZIP을 놓으면 구성 검사, 인코딩·좌표계 추정, 속성 요약이 순서대로 표시됩니다.</p>
+          <p>왼쪽에서 ZIP을 드래그하거나 파일을 선택하면 검사·파싱 진행바가 나타나고, 완료 후 지도와 속성 요약이 채워집니다.</p>
           <ul>
-            <li>SHP/DBF/SHX 조합이 모두 있는지 즉시 확인</li>
-            <li>CPG/PRJ 유무와 추정 결과를 한눈에 체크</li>
-            <li>추후 지도·속성 패널과 연동될 예정이에요</li>
+            <li>SHP/DBF/SHX, CPG/PRJ 유무를 먼저 검사</li>
+            <li>인코딩·좌표계를 추정해 바로 적용</li>
+            <li>지도/테이블 패널에서 내용 확인·탐색</li>
           </ul>
         </div>
       </div>
