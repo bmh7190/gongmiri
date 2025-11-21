@@ -68,7 +68,6 @@ const handleFileChange = (event: Event) => {
           <button type="button" class="drop-zone__button" @click="triggerFileDialog">
             파일 선택하기
           </button>
-          <small>.zip만 선택됩니다</small>
         </div>
       </template>
     </div>
