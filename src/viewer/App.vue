@@ -224,6 +224,7 @@ const handleLargeModalSelect = async (mode: ParseMode) => {
   parseMode.value = mode;
   if (reason === "file") {
     hasAcknowledgedLargeFile.value = true;
+    hasAcknowledgedLargeFeature.value = true;
   }
   if (reason === "feature") {
     hasAcknowledgedLargeFeature.value = true;
