@@ -60,7 +60,6 @@ const handleClose = () => {
         <div>
           <h3>Quick vs Full 모드를 선택해주세요</h3>
           <p>{{ reasonText }}</p>
-          <small class="modal-hint">현재 설정: {{ props.parseMode === "quick" ? "Quick 미리보기" : "Full 분석" }}</small>
         </div>
         <button type="button" class="modal-close" aria-label="닫기" @click="handleClose">
           ✕
@@ -68,7 +67,15 @@ const handleClose = () => {
       </header>
 
       <div class="modal-body">
-        <article class="mode-card">
+        <article
+          class="mode-card"
+          :class="{ 'mode-card--active': props.parseMode === 'quick' }"
+          role="button"
+          tabindex="0"
+          @click="handleSelect('quick')"
+          @keydown.enter.prevent="handleSelect('quick')"
+          @keydown.space.prevent="handleSelect('quick')"
+        >
           <div>
             <h4>Quick 미리보기</h4>
             <p>샘플링 + 좌표 간략화 + 클러스터 기본값으로 4초 이내 결과를 보여줍니다.</p>
@@ -78,12 +85,17 @@ const handleClose = () => {
             <li>좌표 소수점 5자리 유지</li>
             <li>클러스터 ON · 컬럼 통계도 샘플 기반</li>
           </ul>
-          <button type="button" class="reset-button" @click="handleSelect('quick')">
-            Quick로 보기
-          </button>
         </article>
 
-        <article class="mode-card">
+        <article
+          class="mode-card"
+          :class="{ 'mode-card--active': props.parseMode === 'full' }"
+          role="button"
+          tabindex="0"
+          @click="handleSelect('full')"
+          @keydown.enter.prevent="handleSelect('full')"
+          @keydown.space.prevent="handleSelect('full')"
+        >
           <div>
             <h4>Full 분석</h4>
             <p>원본 그대로 모든 피처를 분석합니다. 시간이 더 걸릴 수 있어요.</p>
@@ -93,9 +105,6 @@ const handleClose = () => {
             <li>정확한 통계 · 지도 표현</li>
             <li>기다리는 동안 진행률이 표시됩니다.</li>
           </ul>
-          <button type="button" class="reset-button reset-button--subtle" @click="handleSelect('full')">
-            Full로 계속
-          </button>
         </article>
       </div>
     </section>
@@ -179,6 +188,8 @@ const handleClose = () => {
   flex-direction: column;
   gap: 8px;
   background: #f9fafb;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .mode-card h4 {
@@ -198,5 +209,17 @@ const handleClose = () => {
   color: #4b5563;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.mode-card:hover,
+.mode-card:focus-visible {
+  border-color: #2563eb;
+  background: #eef2ff;
+  outline: none;
+}
+
+.mode-card--active {
+  border-color: #e5e7eb;
+  background: #f9fafb;
 }
 </style>
