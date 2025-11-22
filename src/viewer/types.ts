@@ -48,7 +48,17 @@ export type ZipLayerStatus = {
   missingEssential: string[];
 };
 
-export type SridCode = 4326 | 5179 | 5186 | 3857;
+export type SridCode =
+  | 4326
+  | 3857
+  | 2098
+  | 5174
+  | 5175
+  | 5176
+  | 5179
+  | 5181
+  | 5183
+  | 5186;
 
 export type SridOption = {
   code: SridCode;
