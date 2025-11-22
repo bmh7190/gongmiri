@@ -1353,7 +1353,7 @@ watch(hasFeatures, (present) => {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 180px;
+  width: 200px;
   border-radius: 12px;
   border: 1px solid rgba(107, 114, 128, 0.3);
   background: #fff;
@@ -1369,6 +1369,8 @@ watch(hasFeatures, (present) => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
 }
 
 .srid-option-button {
