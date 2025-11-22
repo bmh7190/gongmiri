@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import * as maplibregl from "maplibre-gl";
+import geojsonvt from "geojson-vt";
+import vtpbf from "vt-pbf";
 import type {
   GeoJSONSource,
   LngLatLike,
@@ -22,7 +24,7 @@ import type {
 import type { Geometry, Position } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import VisualizationPanel from "./VisualizationPanel.vue";
-import { logDebug } from "../utils/logger";
+import { logDebug, logWarn } from "../utils/logger";
 import { SRID_OPTIONS } from "../utils/srid";
 import { CATEGORY_OTHER_COLOR, extractPointCollection } from "../utils/visualization";
 
@@ -56,7 +58,7 @@ const emit = defineEmits<{
   (e: "update-visualization", value: Partial<VisualizationSettings>): void;
 }>();
 
-const SOURCE_ID = "gongmiri-preview-source";
+const VT_SOURCE_ID = "gongmiri-vt-source";
 const SELECTED_SOURCE_ID = "gongmiri-selected-feature";
 const POINT_LAYER_ID = "gongmiri-points";
 const LINE_LAYER_ID = "gongmiri-lines";
@@ -70,6 +72,10 @@ const CLUSTER_SOURCE_ID = "gongmiri-cluster-source";
 const CLUSTER_LAYER_ID = "gongmiri-cluster-layer";
 const CLUSTER_COUNT_LAYER_ID = "gongmiri-cluster-count";
 const CLUSTER_POINT_LAYER_ID = "gongmiri-cluster-points";
+const TILE_PROTOCOL = "geojsonvt";
+const TILE_LAYER_NAME = "gongmiri";
+const TILE_MAX_ZOOM = 14;
+const TILE_INDEX_MAX_POINTS = 120000;
 const DEFAULT_CENTER: LngLatLike = [127.0276, 37.4979];
 const DEFAULT_ZOOM = 5;
 const MAP_STYLE_URL = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
@@ -104,6 +110,10 @@ const showPrjText = ref(false);
 const activeFeatureId = ref<FeatureId | null>(null);
 const showVisualizationPanel = ref(false);
 const pointLayerAvailable = ref(false);
+const MAP_FALLBACK_FEATURE_TARGET = 25000;
+const tileKey = ref<string | null>(null);
+const tileIndexStore = new Map<string, ReturnType<typeof geojsonvt>>();
+let tileProtocolRegistered = false;
 
 const hasFeatures = computed(
   () => Boolean(props.collection?.features?.length),
@@ -119,8 +129,53 @@ const sridStatusLabel = computed(() => {
   return "PRJ 원본";
 });
 
+const ensureTileProtocol = () => {
+  if (tileProtocolRegistered) return;
+  maplibregl.addProtocol(TILE_PROTOCOL, async (params) => {
+    const match = params.url.match(
+      /^geojsonvt:\/\/(.+)\/(\d+)\/(\d+)\/(\d+)\.pbf$/,
+    );
+    if (!match) {
+      throw new Error("잘못된 타일 요청입니다.");
+    }
+    const [, key, z, x, y] = match;
+    if (!key) {
+      throw new Error("타일 키가 없습니다.");
+    }
+    const tileIndex = tileIndexStore.get(key);
+    if (!tileIndex) {
+      throw new Error("타일 인덱스를 찾을 수 없습니다.");
+    }
+    const tile = tileIndex.getTile(Number(z), Number(x), Number(y));
+    if (!tile) {
+      return { data: new ArrayBuffer(0) };
+    }
+    const buffer = vtpbf.fromGeojsonVt({ [TILE_LAYER_NAME]: tile }).buffer;
+    return { data: buffer, expires: new Date(Date.now() + 30000) };
+  });
+  tileProtocolRegistered = true;
+};
+
+const createTileKey = () => `vt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const buildTileUrl = (key: string) =>
+  `${TILE_PROTOCOL}://${key}/{z}/{x}/{y}.pbf`;
+
+const createTileIndex = (collection: FeatureCollectionGeometry) =>
+  geojsonvt(collection as unknown as GeoJSON.FeatureCollection, {
+    maxZoom: TILE_MAX_ZOOM,
+    indexMaxZoom: TILE_MAX_ZOOM,
+    indexMaxPoints: TILE_INDEX_MAX_POINTS,
+    tolerance: 3,
+    buffer: 64,
+    extent: 4096,
+    lineMetrics: false,
+    generateId: false,
+  });
+
 const initMap = () => {
   if (!mapContainer.value || mapInstance.value) return;
+  ensureTileProtocol();
   const map = new maplibregl.Map({
     container: mapContainer.value,
     style: MAP_STYLE_URL,
@@ -132,9 +187,14 @@ const initMap = () => {
   map.addControl(new maplibregl.AttributionControl({ compact: true }));
 
   map.on("load", () => {
-    map.addSource(SOURCE_ID, {
-      type: "geojson",
-      data: EMPTY_COLLECTION,
+    const initialKey = createTileKey();
+    tileIndexStore.set(initialKey, createTileIndex(EMPTY_COLLECTION));
+    tileKey.value = initialKey;
+    map.addSource(VT_SOURCE_ID, {
+      type: "vector",
+      tiles: [buildTileUrl(initialKey)],
+      minzoom: 0,
+      maxzoom: TILE_MAX_ZOOM,
       promoteId: "id",
     });
     map.addSource(SELECTED_SOURCE_ID, {
@@ -162,6 +222,10 @@ const initMap = () => {
 const destroyMap = () => {
   popupRef.value?.remove();
   popupRef.value = null;
+  if (tileKey.value) {
+    tileIndexStore.delete(tileKey.value);
+    tileKey.value = null;
+  }
   mapInstance.value?.remove();
   mapInstance.value = null;
   isMapReady.value = false;
@@ -172,7 +236,8 @@ const addLayers = (map: MapHandle) => {
   map.addLayer({
     id: POLYGON_FILL_LAYER_ID,
     type: "fill",
-    source: SOURCE_ID,
+    source: VT_SOURCE_ID,
+    "source-layer": TILE_LAYER_NAME,
     paint: {
       "fill-color": DEFAULT_COLORS.polygonFill,
       "fill-opacity": 0.2,
@@ -183,7 +248,8 @@ const addLayers = (map: MapHandle) => {
   map.addLayer({
     id: POLYGON_OUTLINE_LAYER_ID,
     type: "line",
-    source: SOURCE_ID,
+    source: VT_SOURCE_ID,
+    "source-layer": TILE_LAYER_NAME,
     paint: {
       "line-color": DEFAULT_COLORS.polygonOutline,
       "line-width": 1.2,
@@ -194,7 +260,8 @@ const addLayers = (map: MapHandle) => {
   map.addLayer({
     id: LINE_LAYER_ID,
     type: "line",
-    source: SOURCE_ID,
+    source: VT_SOURCE_ID,
+    "source-layer": TILE_LAYER_NAME,
     paint: {
       "line-color": DEFAULT_COLORS.line,
       "line-width": 1.2,
@@ -205,7 +272,8 @@ const addLayers = (map: MapHandle) => {
   map.addLayer({
     id: POINT_LAYER_ID,
     type: "circle",
-    source: SOURCE_ID,
+    source: VT_SOURCE_ID,
+    "source-layer": TILE_LAYER_NAME,
     paint: {
       "circle-radius": DEFAULT_POINT_RADIUS,
       "circle-color": DEFAULT_COLORS.point,
@@ -514,28 +582,55 @@ const formatValue = (value: unknown): string => {
   return String(value);
 };
 
+const updateVectorTiles = (collection: FeatureCollectionGeometry) => {
+  if (!mapInstance.value) return false;
+  const source = mapInstance.value.getSource(VT_SOURCE_ID) as (maplibregl.VectorTileSource & {
+    setTiles?: (tiles: string[]) => void;
+    setUrl?: (url: string) => void;
+  }) | null;
+  if (!source) return false;
+  const tileIndex = createTileIndex(collection);
+  const nextKey = createTileKey();
+  const tileUrl = buildTileUrl(nextKey);
+  tileIndexStore.set(nextKey, tileIndex);
+  if (typeof source.setTiles === "function") {
+    source.setTiles([tileUrl]);
+  } else if (typeof source.setUrl === "function") {
+    source.setUrl(tileUrl);
+  } else {
+    logWarn("mapPanel: vector source does not support tile updates");
+  }
+  if (tileKey.value && tileKey.value !== nextKey) {
+    tileIndexStore.delete(tileKey.value);
+  }
+  tileKey.value = nextKey;
+  return true;
+};
+
 const syncCollection = () => {
   if (!isMapReady.value || !mapInstance.value) return;
   const map = mapInstance.value;
-  const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-  if (!source) return;
-  const data = (props.collection ? toRaw(props.collection) : EMPTY_COLLECTION) as FeatureCollectionGeometry;
-  source.setData(data);
+  const rawCollection = (props.collection
+    ? toRaw(props.collection)
+    : EMPTY_COLLECTION) as FeatureCollectionGeometry;
+  const vectorReady = updateVectorTiles(rawCollection);
+  const sampledCollection = props.collection
+    ? buildSampledCollection(rawCollection, MAP_FALLBACK_FEATURE_TARGET)
+    : EMPTY_COLLECTION;
   const clusterSource = map.getSource(CLUSTER_SOURCE_ID) as GeoJSONSource | undefined;
   if (clusterSource) {
-    const pointCollection = extractPointCollection(
-      (props.collection ? toRaw(props.collection) : EMPTY_COLLECTION) as FeatureCollectionGeometry,
-    );
-    clusterSource.setData(pointCollection);
+    const pointCollection = extractPointCollection(sampledCollection);
+    setSourceData(clusterSource, pointCollection, pointCollection);
   }
   logDebug("mapPanel:data", {
-    features: data.features?.length ?? 0,
+    features: rawCollection.features?.length ?? 0,
     sridMode: props.sridMode,
+    vectorReady,
   });
 
-  updateLayerVisibility(data);
-  if (hasFeatures.value && props.collection) {
-    fitToBounds(data);
+  updateLayerVisibility(rawCollection);
+  if (hasFeatures.value && rawCollection.features?.length) {
+    fitToBounds(rawCollection);
   } else {
     resetView();
   }
@@ -736,7 +831,12 @@ const handleVisualizationUpdate = (value: Partial<VisualizationSettings>) => {
 };
 
 const applyFeatureState = (featureId: FeatureId | null) => {
-  updateSourceSelection(SOURCE_ID, activeFeatureId.value, featureId);
+  updateSourceSelection(
+    VT_SOURCE_ID,
+    activeFeatureId.value,
+    featureId,
+    TILE_LAYER_NAME,
+  );
   updateSourceSelection(CLUSTER_SOURCE_ID, activeFeatureId.value, featureId);
   activeFeatureId.value = featureId;
 };
@@ -749,7 +849,10 @@ const setSelectedFeatureGeometry = (feature: FeatureGeometry | null) => {
     source.setData(EMPTY_COLLECTION);
     return;
   }
-  const plainFeature = JSON.parse(JSON.stringify(feature)) as FeatureGeometry;
+  const plainFeature =
+    typeof structuredClone === "function"
+      ? structuredClone(toRaw(feature))
+      : (toRaw(feature) as FeatureGeometry);
   source.setData({
     type: "FeatureCollection",
     features: [plainFeature],
@@ -775,12 +878,13 @@ const updateSourceSelection = (
   sourceId: string,
   previous: FeatureId | null,
   next: FeatureId | null,
+  sourceLayer?: string,
 ) => {
   if (!mapInstance.value) return;
   if (previous) {
     try {
       mapInstance.value.setFeatureState(
-        { source: sourceId, id: previous },
+        { source: sourceId, sourceLayer, id: previous },
         { selected: false },
       );
     } catch (error) {
@@ -790,7 +894,7 @@ const updateSourceSelection = (
   if (next) {
     try {
       mapInstance.value.setFeatureState(
-        { source: sourceId, id: next },
+        { source: sourceId, sourceLayer, id: next },
         { selected: true },
       );
     } catch (error) {
@@ -823,6 +927,54 @@ const focusFeatureById = (featureId: FeatureId | null) => {
     maxZoom: 13,
     duration: 500,
   });
+};
+
+const setSourceData = (
+  source: GeoJSONSource | undefined,
+  data: FeatureCollectionGeometry,
+  fallback?: FeatureCollectionGeometry,
+): { usedFallback: boolean } => {
+  if (!source) return { usedFallback: false };
+  try {
+    source.setData(data);
+    return { usedFallback: false };
+  } catch (error) {
+    logWarn("mapPanel:setData failed; falling back to sample", error);
+    if (fallback) {
+      try {
+        source.setData(fallback);
+        return { usedFallback: true };
+      } catch (fallbackError) {
+        logWarn("mapPanel:fallback setData failed", fallbackError);
+      }
+    }
+    return { usedFallback: false };
+  }
+};
+
+const buildSampledCollection = (
+  collection: FeatureCollectionGeometry,
+  target: number,
+): FeatureCollectionGeometry => {
+  const features = collection.features ?? [];
+  if (features.length <= target) return collection;
+  const stride = Math.max(1, Math.floor(features.length / target));
+  const sampled: FeatureGeometry[] = [];
+  for (let index = 0; index < features.length; index += stride) {
+    if (sampled.length >= target) break;
+    const feature = features[index];
+    if (!feature?.geometry) continue;
+    sampled.push({
+      type: "Feature",
+      geometry: feature.geometry,
+      properties: feature.properties ?? {},
+      id: feature.id ?? undefined,
+    });
+  }
+  return {
+    type: "FeatureCollection",
+    features: sampled,
+  };
 };
 
 const hasGeometry = (
