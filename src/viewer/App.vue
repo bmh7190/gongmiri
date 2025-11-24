@@ -593,7 +593,13 @@ const ensureFeatureIds = (collection: FeatureCollectionGeometry) => {
       feature.properties?.id ??
       feature.properties?.ID ??
       `feature-${index}`;
-    feature.id = toFeatureId(candidate);
+    const normalized = toFeatureId(candidate);
+    feature.id = normalized;
+    if (!feature.properties) {
+      feature.properties = { id: normalized };
+    } else if (feature.properties.id === undefined || feature.properties.id === null) {
+      feature.properties.id = normalized;
+    }
   });
 };
 
