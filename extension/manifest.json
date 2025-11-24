@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "gongmiri",
-  "version": "0.1.0",
+  "name": "공미리(gongmiri)",
+  "version": "0.1.1",
   "description": "공간데이터(SHP/ZIP) 다운로드 즉시 브라우저에서 미리보기",
 
   "action": {
