@@ -1,6 +1,9 @@
 # 🗺️ 공간데이터(SHP/ZIP) 미리보기 확장 프로그램
 **Gongmiri**는 SHP/ZIP 공간데이터를 다운로드하는 즉시 브라우저에서 바로 미리볼 수 있는 Chrome Extension입니다.
 
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-GongMiri-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/apllbcgmjgicgmgfpnkeddjammiellca?utm_source=item-share-cb)
+[![Notion Project](https://img.shields.io/badge/Notion_Project-Open-000000?logo=notion&logoColor=white)](https://www.notion.so/GongMiri-Project-2a7eb97891c680b88428e78c322776fc?source=copy_link)
+
 ## 왜 만들었나요?
 
 공간데이터 분석을 진행할 때 우리는 주로 SHP(Shapefile) 파일을 다운로드해 활용합니다.  
