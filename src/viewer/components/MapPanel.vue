@@ -100,11 +100,11 @@ const EMPTY_COLLECTION: FeatureCollectionGeometry = {
 };
 
 const mapContainer = ref<HTMLDivElement | null>(null);
-type MapHandle = Parameters<maplibregl.Popup["addTo"]>[0];
+type MapHandle = maplibregl.Map;
 
 const mapInstance = ref<MapHandle | null>(null);
 const isMapReady = ref(false);
-const popupRef = ref<maplibregl.Popup | null>(null);
+const popupRef = ref<any>(null);
 const showSridPanel = ref(false);
 const showPrjText = ref(false);
 const activeFeatureId = ref<FeatureId | null>(null);
@@ -473,6 +473,7 @@ const showPopup = (feature: MapGeoJSONFeature, position: LngLatLike) => {
     .setHTML(html)
     // MapLibre typings expect their internal Map$1 type; cast to never to satisfy TS.
     .addTo(targetMap as never);
+  makePopupDraggable(popupRef.value as any, targetMap as any);
 };
 
 const buildPopupHtml = (feature: MapGeoJSONFeature): string => {
@@ -580,6 +581,57 @@ const formatValue = (value: unknown): string => {
   if (value === null || value === undefined) return "—";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+};
+
+const makePopupDraggable = (
+  popup: any,
+  map: any,
+) => {
+  if (!popup || !map) return;
+  const element = popup.getElement?.();
+  if (!element) return;
+  const handle = element.querySelector(".map-popup__header") as HTMLElement | null;
+  const dragTarget = handle ?? element;
+  element.classList.add("map-popup--draggable");
+
+  let start: { x: number; y: number; lngLat: maplibregl.LngLatLike } | null = null;
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (!start) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    const current = map.project(start.lngLat);
+    const nextPoint = new maplibregl.Point(current.x + deltaX, current.y + deltaY);
+    popup.setLngLat(map.unproject(nextPoint));
+  };
+
+  const endDrag = (event: PointerEvent) => {
+    dragTarget.releasePointerCapture(event.pointerId);
+    window.removeEventListener("pointermove", onPointerMove);
+    element.classList.remove("map-popup--dragging");
+    start = null;
+  };
+
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    const lngLat = popup.getLngLat?.();
+    if (!lngLat) return;
+    event.preventDefault();
+    event.stopPropagation();
+    start = { x: event.clientX, y: event.clientY, lngLat };
+    dragTarget.setPointerCapture(event.pointerId);
+    element.classList.add("map-popup--dragging");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", endDrag, { once: true });
+  };
+
+  const cleanup = () => {
+    dragTarget.removeEventListener("pointerdown", onPointerDown);
+    window.removeEventListener("pointermove", onPointerMove);
+  };
+
+  dragTarget.addEventListener("pointerdown", onPointerDown);
+  popup.on?.("close", cleanup);
 };
 
 const updateVectorTiles = (collection: FeatureCollectionGeometry) => {
@@ -1568,6 +1620,14 @@ watch(hasFeatures, (present) => {
   background: #fff;
   border-radius: 8px;
   overflow: hidden;
+}
+
+:global(.map-popup--draggable .map-popup__header) {
+  cursor: move;
+}
+
+:global(.map-popup--dragging) {
+  opacity: 0.96;
 }
 
 :global(.map-popup__header) {
