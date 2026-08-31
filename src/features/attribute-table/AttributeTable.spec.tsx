@@ -69,4 +69,42 @@ describe("AttributeTable", () => {
     expect(html).toContain('aria-pressed="false"');
     expect(html).not.toContain("Sort column");
   });
+
+  it("renders a bounded native row page instead of a virtualized body", async () => {
+    const i18n = createInstance();
+    await i18n.init({
+      lng: "en",
+      fallbackLng: "en",
+      interpolation: { escapeValue: false },
+      showSupportNotice: false,
+      resources: { en: { translation: messages.en } },
+    });
+    const largeCollection: FeatureCollectionGeometry = {
+      type: "FeatureCollection",
+      features: Array.from({ length: 101 }, (_, index) => ({
+        type: "Feature",
+        id: `feature-${index + 1}`,
+        geometry: { type: "Point", coordinates: [127, 38] },
+        properties: { name: `Feature ${index + 1}`, score: index + 1 },
+      })),
+    };
+
+    const html = renderToStaticMarkup(
+      <I18nextProvider i18n={i18n}>
+        <AttributeTable
+          collection={largeCollection}
+          columns={columns}
+          selectedId={null}
+          onSelect={() => {}}
+        />
+      </I18nextProvider>,
+    );
+
+    expect(html).toContain("Page 1 of 2");
+    expect(html).toContain("Previous");
+    expect(html).toContain("Next");
+    expect(html).toContain("Feature 100");
+    expect(html).not.toContain("Feature 101");
+    expect(html).not.toContain("Virtual scrolling");
+  });
 });
