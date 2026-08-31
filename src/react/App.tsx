@@ -375,59 +375,58 @@ export default function App() {
           <h1>{t("app.title")}</h1>
         </div>
         <div className="react-header__actions">
-          <button
-            type="button"
-            className="react-theme-toggle"
-            aria-label={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
-            title={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
-            onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
-          >
-            {theme === "light" ? (
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M20.4 15.3A8.5 8.5 0 0 1 8.7 3.6 8.5 8.5 0 1 0 20.4 15.3Z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-              </svg>
-            )}
-          </button>
-          <label className="react-language">
-            <span>{t("app.language")}</span>
-            <select
-              value={i18n.language}
-              onChange={(event) =>
-                void changeLocale(event.target.value as AppLocale)
-              }
+          {inspection?.hasValidLayer && (
+            <DatasetControls
+              inspection={inspection}
+              encoding={encoding}
+              sridOverride={sridOverride}
+              requiresSrid={requiresSrid}
+              disabled={isLoading}
+              parseMode={parseMode}
+              onEncodingChange={handleEncodingChange}
+              onSridChange={handleSridChange}
+              onParseModeChange={handleParseModeChange}
+            />
+          )}
+          <div className="react-header__preferences">
+            <button
+              type="button"
+              className="react-theme-toggle"
+              aria-label={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
+              title={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
+              onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
             >
-              {localeOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              {theme === "light" ? (
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20.4 15.3A8.5 8.5 0 0 1 8.7 3.6 8.5 8.5 0 1 0 20.4 15.3Z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+                </svg>
+              )}
+            </button>
+            <label className="react-language">
+              <span>{t("app.language")}</span>
+              <select
+                value={i18n.language}
+                onChange={(event) =>
+                  void changeLocale(event.target.value as AppLocale)
+                }
+              >
+                {localeOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </header>
 
       <DownloadDetection />
-
-      {inspection?.hasValidLayer && (
-        <div className="react-dataset-toolbar">
-          <DatasetControls
-            inspection={inspection}
-            encoding={encoding}
-            sridOverride={sridOverride}
-            requiresSrid={requiresSrid}
-            disabled={isLoading}
-            parseMode={parseMode}
-            onEncodingChange={handleEncodingChange}
-            onSridChange={handleSridChange}
-            onParseModeChange={handleParseModeChange}
-          />
-        </div>
-      )}
 
       <section
         id="viewer-content"
