@@ -306,6 +306,31 @@ export default function AttributeTable({
   }, [onFilteredIdsChange, rows]);
 
   useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) return;
+
+      const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? ROW_HEIGHT
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? viewport.clientHeight
+          : 1;
+
+      event.preventDefault();
+      event.stopPropagation();
+      viewport.scrollBy({
+        left: event.deltaX * multiplier,
+        top: event.deltaY * multiplier,
+      });
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  useEffect(() => {
     if (!selectedId) {
       lastScrolledSelectionRef.current = null;
       return;
