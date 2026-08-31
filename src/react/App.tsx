@@ -38,6 +38,16 @@ import "./styles.css";
 
 const MapViewer = lazy(() => import("../features/map-viewer/MapViewer"));
 type ResultPanel = "map" | "quality" | "table";
+type AppTheme = "light" | "dark";
+
+const THEME_STORAGE_KEY = "gongmiri.theme";
+
+const getInitialTheme = (): AppTheme => {
+  if (typeof window === "undefined") return "light";
+  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+};
 
 const createDefaultVisualization = (): VisualizationSettings => ({
   colorMode: "default",
@@ -51,6 +61,7 @@ const createDefaultVisualization = (): VisualizationSettings => ({
 
 export default function App() {
   const { t, i18n } = useTranslation();
+  const [theme, setTheme] = useState<AppTheme>(getInitialTheme);
   const { parse, progress, cancel } = useParserWorker();
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,7 +74,7 @@ export default function App() {
   const [sridOverride, setSridOverride] = useState<SridCode | null>(null);
   const [requiresSrid, setRequiresSrid] = useState(false);
   const [parseMode, setParseMode] = useState<ParseMode>("full");
-  const [featureStats, setFeatureStats] = useState({ total: 0, displayed: 0, coordinates: 0 });
+  const [featureStats, setFeatureStats] = useState({ total: 0 });
   const [columnQuery, setColumnQuery] = useState("");
   const [columnQualityFilter, setColumnQualityFilter] =
     useState<ColumnQualityFilter>("all");
@@ -141,6 +152,11 @@ export default function App() {
   );
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       window.dispatchEvent(new Event("resize"));
     });
@@ -182,11 +198,7 @@ export default function App() {
           nextFileBytes,
           allowAutoQuick,
         );
-        setFeatureStats({
-          total: parsed.totalFeatures,
-          displayed: parsed.displayedFeatures,
-          coordinates: parsed.coordinateCount,
-        });
+        setFeatureStats({ total: parsed.totalFeatures });
         setParseMode(parsed.mode);
         setCollection(parsed.collection);
         setFilteredFeatureIds(parsed.collection.features.map((feature) => String(feature.id)));
@@ -221,7 +233,7 @@ export default function App() {
       setSelectedId(null);
       setSridOverride(null);
       setRequiresSrid(false);
-      setFeatureStats({ total: 0, displayed: 0, coordinates: 0 });
+      setFeatureStats({ total: 0 });
       setColumnQuery("");
       setColumnQualityFilter("all");
       setColumnSort("name");
@@ -371,13 +383,29 @@ export default function App() {
               requiresSrid={requiresSrid}
               disabled={isLoading}
               parseMode={parseMode}
-              totalFeatures={featureStats.total}
-              displayedFeatures={featureStats.displayed}
               onEncodingChange={handleEncodingChange}
               onSridChange={handleSridChange}
               onParseModeChange={handleParseModeChange}
             />
           )}
+          <button
+            type="button"
+            className="react-theme-toggle"
+            aria-label={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
+            title={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
+            onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
+          >
+            {theme === "light" ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20.4 15.3A8.5 8.5 0 0 1 8.7 3.6 8.5 8.5 0 1 0 20.4 15.3Z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+            )}
+          </button>
           <label className="react-language">
             <span>{t("app.language")}</span>
             <select

@@ -66,14 +66,6 @@
   color: var(--color-surface);
   background: var(--color-text);
 }
-.dataset-controls__mode small {
-  grid-column: 1 / -1;
-  margin-top: 3px;
-  color: var(--color-text-muted);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
 @media (max-width: 900px) {
   .dataset-controls { flex-wrap: wrap; }
 }

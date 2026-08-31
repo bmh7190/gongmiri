@@ -5,6 +5,8 @@ export const messages = {
       tagline: "공간데이터를 더 빠르게",
       title: "공간데이터 미리보기",
       language: "언어",
+      switchToDark: "다크 모드로 전환",
+      switchToLight: "라이트 모드로 전환",
       analyzeAnother: "새 ZIP 분석하기",
     },
     upload: {
@@ -180,7 +182,6 @@ export const messages = {
       chooseSrid: "SRID를 선택하세요",
       sridRequired: "PRJ가 없습니다. 정확한 지도 표시를 위해 원본 좌표계를 선택하세요.",
       analysisMode: "분석 모드",
-      featureDisplay: "표시 {{displayed}} / 원본 {{total}}",
     },
     visualization: {
       title: "지도 시각화",
@@ -206,6 +207,8 @@ export const messages = {
       tagline: "Faster spatial data inspection",
       title: "Spatial data preview",
       language: "Language",
+      switchToDark: "Switch to dark mode",
+      switchToLight: "Switch to light mode",
       analyzeAnother: "Analyze another ZIP",
     },
     upload: {
@@ -381,7 +384,6 @@ export const messages = {
       chooseSrid: "Choose an SRID",
       sridRequired: "This ZIP has no PRJ. Choose its source coordinate system for an accurate map.",
       analysisMode: "Analysis mode",
-      featureDisplay: "Showing {{displayed}} / {{total}}",
     },
     visualization: {
       title: "Map visualization",
