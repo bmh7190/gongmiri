@@ -53,6 +53,10 @@ describe("AttributeTable", () => {
     );
 
     expect(html).toContain("Detailed filters");
+    expect(html).toContain("Columns 2/2");
+    expect(html).toContain("Column visibility");
+    expect(html).toContain("Show all");
+    expect(html).toContain('type="checkbox" checked=""');
     expect(html).not.toContain("<details open");
     expect(html).toContain('aria-sort="none"');
     expect(html).toContain('title="name"');
