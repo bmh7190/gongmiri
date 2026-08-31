@@ -41,6 +41,11 @@
 }
 
 * { box-sizing: border-box; }
+html, body, #app {
+  width: 800px;
+  height: 600px;
+  overflow: hidden;
+}
 body { margin: 0; }
 button, input, select { font: inherit; }
 button, select, input { accent-color: var(--color-primary); }
@@ -61,14 +66,19 @@ button, select, input { accent-color: var(--color-primary); }
 .react-skip-link:focus { transform: translateY(0); }
 
 .react-app {
-  width: 960px;
-  min-height: 680px;
+  width: 800px;
+  height: 600px;
+  min-height: 600px;
   margin-inline: auto;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
   container-name: viewer;
   container-type: inline-size;
 }
-.react-header, .react-grid { max-width: 1180px; margin-inline: auto; }
+.react-header, .react-grid { width: 100%; max-width: 1180px; margin-inline: auto; }
 .react-header {
   margin-bottom: 20px;
   display: grid;
@@ -139,8 +149,13 @@ button, select, input { accent-color: var(--color-primary); }
   grid-template-columns: minmax(260px, .75fr) minmax(0, 1.7fr);
   gap: 20px;
 }
-.react-grid.is-empty { grid-template-columns: minmax(280px, 720px); justify-content: center; }
+.react-grid.is-empty {
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+}
 .react-grid.is-empty .react-status { display: none; }
+.react-grid.is-empty .react-drop-zone { height: 100%; }
 .react-grid.is-viewer { grid-template-columns: minmax(0, 1fr); }
 .react-drop-zone, .react-status {
   border: 1px solid var(--color-border);
