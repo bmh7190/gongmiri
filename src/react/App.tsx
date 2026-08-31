@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { inspectZipEntries } from "../domain/inspect-zip";
-import { formatFileSize } from "../domain/format";
 import { getColumnQualityIssues } from "../domain/column-quality";
 import {
   exploreColumns,
@@ -21,6 +20,7 @@ import type {
 } from "../domain/types";
 import AttributeTable from "../features/attribute-table/AttributeTable";
 import DatasetControls from "../features/dataset-controls/DatasetControls";
+import DatasetSummary from "../features/dataset-summary/DatasetSummary";
 import VisualizationControls from "../features/visualization/VisualizationControls";
 import ExportControls from "../features/export/ExportControls";
 import DownloadDetection from "../features/download-detection/DownloadDetection";
@@ -64,7 +64,6 @@ export default function App() {
   const [requiresSrid, setRequiresSrid] = useState(false);
   const [parseMode, setParseMode] = useState<ParseMode>("full");
   const [featureStats, setFeatureStats] = useState({ total: 0, displayed: 0, coordinates: 0 });
-  const [fileBytes, setFileBytes] = useState(0);
   const [columnQuery, setColumnQuery] = useState("");
   const [columnQualityFilter, setColumnQualityFilter] =
     useState<ColumnQualityFilter>("all");
@@ -228,7 +227,6 @@ export default function App() {
       setColumnSort("name");
       setActiveResultPanel("map");
       setFilteredFeatureIds([]);
-      setFileBytes(file.size);
       setVisualizationSettings(createDefaultVisualization());
       sourceRef.current = null;
 
@@ -467,49 +465,13 @@ export default function App() {
           )}
           {result && (
             <div className="react-summary">
-              <section
-                className="react-summary__headline"
-                aria-label={t("summary.overview")}
-              >
-                <div>
-                  <span>{t("summary.file")}</span>
-                  <strong>{result.fileName}</strong>
-                </div>
-                <div>
-                  <span>{t("summary.fileSize")}</span>
-                  <strong>{formatFileSize(fileBytes, i18n.language)}</strong>
-                </div>
-                <div>
-                  <span>{t("summary.features")}</span>
-                  <strong>{result.featureCount.toLocaleString(i18n.language)}</strong>
-                </div>
-                <div>
-                  <span>{t("summary.coordinates")}</span>
-                  <strong>{featureStats.coordinates.toLocaleString(i18n.language)}</strong>
-                </div>
-                <div>
-                  <span>{t("summary.coordinateSystem")}</span>
-                  <strong>
-                    {sridOverride ?? inspection?.detectedSridCode
-                      ? `EPSG:${sridOverride ?? inspection?.detectedSridCode}`
-                      : inspection?.hasPrj
-                        ? t("dataset.fileProjection")
-                        : "—"}
-                  </strong>
-                </div>
-                <div>
-                  <span>{t("summary.encoding")}</span>
-                  <strong>{encoding.toUpperCase()}</strong>
-                </div>
-                <div>
-                  <span>{t("summary.mode")}</span>
-                  <strong>{parseMode === "quick" ? "Quick" : "Full"}</strong>
-                </div>
-                <div>
-                  <span>{t("summary.geometry")}</span>
-                  <strong>{result.geometryTypes.join(", ") || "—"}</strong>
-                </div>
-              </section>
+              {inspection && (
+                <DatasetSummary
+                  inspection={inspection}
+                  featureCount={featureStats.total || result.featureCount}
+                  geometryTypes={result.geometryTypes}
+                />
+              )}
               <div className="react-result-tabs" role="tablist" aria-label={t("tabs.label")}>
                 {(["map", "quality", "table"] as const).map((panel) => (
                   <button

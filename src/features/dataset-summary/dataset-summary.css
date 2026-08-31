@@ -1,0 +1,76 @@
+.dataset-summary {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgba(30, 41, 59, .08);
+}
+.dataset-summary h2 { margin: 0; font-size: 18px; }
+.dataset-summary__overview {
+  display: grid;
+  grid-template-columns: minmax(140px, .7fr) minmax(240px, 1.3fr);
+  gap: 12px;
+}
+.dataset-summary__overview article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+.dataset-summary__overview article > span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.dataset-summary__overview article > strong { font-size: 22px; }
+.dataset-summary__types { display: flex; flex-wrap: wrap; gap: 6px; }
+.dataset-summary__types strong {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.dataset-summary__components {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+.dataset-summary__components > div {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 4px;
+}
+.dataset-summary__components strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.dataset-summary__components strong span {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+.dataset-summary__components .is-missing strong { color: var(--color-text-muted); }
+.dataset-summary__components .is-missing strong span { background: var(--color-danger); }
+.dataset-summary__components small { color: var(--color-text-muted); font-size: 11px; }
+.dataset-summary__components em { color: var(--color-danger); font-size: 10px; font-style: normal; font-weight: 700; }
+
+@media (max-width: 900px) {
+  .dataset-summary__components { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 480px) {
+  .dataset-summary { padding: 16px 18px; }
+  .dataset-summary__overview { grid-template-columns: 1fr; }
+  .dataset-summary__components { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
