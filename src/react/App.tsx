@@ -437,6 +437,14 @@ export default function App() {
 
       <DownloadDetectionPrompt detection={downloadDetection} />
 
+      {result && inspection && (
+        <DatasetSummary
+          inspection={inspection}
+          featureCount={featureStats.total || result.featureCount}
+          geometryTypes={result.geometryTypes}
+        />
+      )}
+
       <section
         id="viewer-content"
         tabIndex={-1}
@@ -504,13 +512,6 @@ export default function App() {
           )}
           {result && (
             <div className="react-summary">
-              {inspection && (
-                <DatasetSummary
-                  inspection={inspection}
-                  featureCount={featureStats.total || result.featureCount}
-                  geometryTypes={result.geometryTypes}
-                />
-              )}
               <div className="react-result-tabs" role="tablist" aria-label={t("tabs.label")}>
                 {(["map", "quality", "table"] as const).map((panel) => (
                   <button
