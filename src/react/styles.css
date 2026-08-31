@@ -61,7 +61,7 @@ button, select, input { accent-color: var(--color-primary); }
 .react-skip-link:focus { transform: translateY(0); }
 
 .react-app { min-height: 100vh; padding: 28px; }
-.react-header, .react-grid { max-width: 1180px; margin-inline: auto; }
+.react-header, .react-dataset-toolbar, .react-grid { max-width: 1180px; margin-inline: auto; }
 .react-header {
   margin-bottom: 20px;
   display: flex;
@@ -70,6 +70,11 @@ button, select, input { accent-color: var(--color-primary); }
   gap: 20px;
 }
 .react-header h1 { margin: 4px 0 0; font-size: clamp(24px, 3vw, 34px); }
+.react-dataset-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
 .react-header__actions {
   display: flex;
   align-items: flex-start;
