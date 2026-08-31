@@ -167,6 +167,9 @@ export default function AttributeTable({
     enableSortingRemoval: true,
     sortDescFirst: false,
     columnResizeMode: "onChange",
+    initialState: {
+      columnPinning: { start: ["__rowNumber"], end: [] },
+    },
   });
   const rows = table.getRowModel().rows;
   const visibleColumns = table.getVisibleLeafColumns();
@@ -256,14 +259,36 @@ export default function AttributeTable({
               </div>
               <div className="react-table__column-list">
                 {dataColumns.map((column) => (
-                  <label key={column.id}>
-                    <input
-                      type="checkbox"
-                      checked={column.getIsVisible()}
-                      onChange={column.getToggleVisibilityHandler()}
-                    />
-                    <span title={column.id}>{column.id}</span>
-                  </label>
+                  <div key={column.id} className="react-table__column-option">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={column.getIsVisible()}
+                        onChange={column.getToggleVisibilityHandler()}
+                      />
+                      <span title={column.id}>{column.id}</span>
+                    </label>
+                    <div className="react-table__pin-actions">
+                      <button
+                        type="button"
+                        className={column.getIsPinned() === "start" ? "is-active" : ""}
+                        aria-label={t("table.pinColumnStart", { column: column.id })}
+                        aria-pressed={column.getIsPinned() === "start"}
+                        onClick={() => column.pin(column.getIsPinned() === "start" ? false : "start")}
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        className={column.getIsPinned() === "end" ? "is-active" : ""}
+                        aria-label={t("table.pinColumnEnd", { column: column.id })}
+                        aria-pressed={column.getIsPinned() === "end"}
+                        onClick={() => column.pin(column.getIsPinned() === "end" ? false : "end")}
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -349,12 +374,20 @@ export default function AttributeTable({
           >
             {headerGroup.headers.map((header) => {
               const sorted = header.column.getIsSorted();
+              const pinned = header.column.getIsPinned();
+              const pinnedStyle = pinned === "start"
+                ? { left: `${header.column.getStart("start")}px` }
+                : pinned === "end"
+                  ? { right: `${header.column.getAfter("end")}px` }
+                  : undefined;
               if (header.column.id === "__rowNumber") {
                 return (
                   <span
                     key={header.id}
                     role="columnheader"
                     aria-label={t("table.rowNumber")}
+                    className="is-pinned"
+                    style={pinnedStyle}
                   />
                 );
               }
@@ -363,6 +396,8 @@ export default function AttributeTable({
                   key={header.id}
                   role="columnheader"
                   aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
+                  className={pinned ? "is-pinned" : undefined}
+                  style={pinnedStyle}
                 >
                   <button
                     type="button"
@@ -412,12 +447,33 @@ export default function AttributeTable({
                   onKeyDown={(event) => handleRowKeyDown(event, absoluteIndex)}
                 >
                   {row.getVisibleCells().map((cell) => {
+                    const pinned = cell.column.getIsPinned();
+                    const pinnedStyle = pinned === "start"
+                      ? { left: `${cell.column.getStart("start")}px` }
+                      : pinned === "end"
+                        ? { right: `${cell.column.getAfter("end")}px` }
+                        : undefined;
                     if (cell.column.id === "__rowNumber") {
-                      return <span key={cell.id} role="gridcell">{absoluteIndex + 1}</span>;
+                      return (
+                        <span
+                          key={cell.id}
+                          role="gridcell"
+                          className="is-pinned"
+                          style={pinnedStyle}
+                        >
+                          {absoluteIndex + 1}
+                        </span>
+                      );
                     }
                     const value = formatCell(cell.getValue());
                     return (
-                      <span key={cell.id} role="gridcell" title={value}>
+                      <span
+                        key={cell.id}
+                        role="gridcell"
+                        title={value}
+                        className={pinned ? "is-pinned" : undefined}
+                        style={pinnedStyle}
+                      >
                         <table.FlexRender cell={cell} />
                       </span>
                     );
