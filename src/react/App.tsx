@@ -533,14 +533,6 @@ export default function App() {
                 role="tabpanel"
                 aria-labelledby="result-tab-map"
               >
-                <VisualizationControls
-                  columns={result.columns}
-                  settings={visualizationSettings}
-                  hasPoints={hasPoints}
-                  onChange={(change) =>
-                    setVisualizationSettings((current) => ({ ...current, ...change }))
-                  }
-                />
                 <Suspense fallback={<div className="react-map-loading">{t("map.loading")}</div>}>
                   <MapViewer
                     collection={mapCollection}
@@ -549,6 +541,14 @@ export default function App() {
                     visualization={visualization}
                   />
                 </Suspense>
+                <VisualizationControls
+                  columns={result.columns}
+                  settings={visualizationSettings}
+                  hasPoints={hasPoints}
+                  onChange={(change) =>
+                    setVisualizationSettings((current) => ({ ...current, ...change }))
+                  }
+                />
               </section>
               <section
                 id="result-panel-quality"
