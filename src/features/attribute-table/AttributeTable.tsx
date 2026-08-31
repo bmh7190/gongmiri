@@ -178,7 +178,6 @@ export default function AttributeTable({
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const lastScrolledSelectionRef = useRef<FeatureId | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
@@ -282,10 +281,6 @@ export default function AttributeTable({
   const rowTemplate = visibleColumns
     .map((column) => `${column.getSize()}px`)
     .join(" ");
-  const idIndex = useMemo(
-    () => new Map(rows.map((row, index) => [row.original.id, index])),
-    [rows],
-  );
   const getRowKey = useCallback(
     (index: number) => rows[index]?.original.id ?? index,
     [rows],
@@ -329,18 +324,6 @@ export default function AttributeTable({
     viewport.addEventListener("wheel", handleWheel, { passive: false });
     return () => viewport.removeEventListener("wheel", handleWheel);
   }, []);
-
-  useEffect(() => {
-    if (!selectedId) {
-      lastScrolledSelectionRef.current = null;
-      return;
-    }
-    if (lastScrolledSelectionRef.current === selectedId) return;
-    const index = idIndex.get(selectedId);
-    if (index === undefined) return;
-    lastScrolledSelectionRef.current = selectedId;
-    rowVirtualizer.scrollToIndex(index, { align: "auto" });
-  }, [idIndex, rowVirtualizer, selectedId]);
 
   const handleRowKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
