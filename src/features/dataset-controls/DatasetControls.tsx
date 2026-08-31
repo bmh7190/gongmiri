@@ -15,8 +15,6 @@ type DatasetControlsProps = {
   requiresSrid: boolean;
   disabled: boolean;
   parseMode: ParseMode;
-  totalFeatures: number;
-  displayedFeatures: number;
   onEncodingChange: (encoding: EncodingOption) => void;
   onSridChange: (srid: SridCode | null) => void;
   onParseModeChange: (mode: ParseMode) => void;
@@ -29,13 +27,11 @@ export default function DatasetControls({
   requiresSrid,
   disabled,
   parseMode,
-  totalFeatures,
-  displayedFeatures,
   onEncodingChange,
   onSridChange,
   onParseModeChange,
 }: DatasetControlsProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   return (
     <div
@@ -62,14 +58,6 @@ export default function DatasetControls({
           >
             Full
           </button>
-          {totalFeatures > 0 && (
-            <small>
-              {t("dataset.featureDisplay", {
-                displayed: displayedFeatures.toLocaleString(i18n.language),
-                total: totalFeatures.toLocaleString(i18n.language),
-              })}
-            </small>
-          )}
       </fieldset>
       <label>
           <span>{t("dataset.encoding")}</span>
