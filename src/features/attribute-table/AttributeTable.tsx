@@ -178,6 +178,7 @@ export default function AttributeTable({
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const lastScrolledSelectionRef = useRef<FeatureId | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
@@ -301,18 +302,18 @@ export default function AttributeTable({
   const virtualRows = rowVirtualizer.getVirtualItems();
 
   useEffect(() => {
-    const viewport = viewportRef.current;
-    if (viewport) viewport.scrollTop = 0;
-  }, [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, table.state.sorting]);
-
-  useEffect(() => {
     onFilteredIdsChange?.(rows.map((row) => row.original.id));
   }, [onFilteredIdsChange, rows]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
-    const index = selectedId ? idIndex.get(selectedId) : undefined;
-    if (!viewport || index === undefined) return;
+    if (!selectedId) {
+      lastScrolledSelectionRef.current = null;
+      return;
+    }
+    if (lastScrolledSelectionRef.current === selectedId) return;
+    const index = idIndex.get(selectedId);
+    if (index === undefined) return;
+    lastScrolledSelectionRef.current = selectedId;
     rowVirtualizer.scrollToIndex(index, { align: "auto" });
   }, [idIndex, rowVirtualizer, selectedId]);
 
@@ -362,6 +363,7 @@ export default function AttributeTable({
                 <DndContext
                   sensors={dragSensors}
                   collisionDetection={closestCenter}
+                  autoScroll={false}
                   onDragEnd={handleColumnDragEnd}
                 >
                   <SortableContext
