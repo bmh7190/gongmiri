@@ -474,7 +474,10 @@ export default function App() {
           </label>
         )}
 
-        <div className="react-status" aria-busy={isLoading}>
+        <div
+          className={`react-status${result ? " has-result" : ""}`}
+          aria-busy={isLoading}
+        >
           {progress && (
             <div className="react-progress" role="status" aria-live="polite" aria-atomic="true">
               <div>
@@ -653,26 +656,26 @@ export default function App() {
                 aria-labelledby="result-tab-table"
               >
                 {collection && (
-                  <AttributeTable
-                    collection={collection}
-                    columns={result.columns}
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                    onFilteredIdsChange={setFilteredFeatureIds}
-                  />
+                  <>
+                    <AttributeTable
+                      collection={collection}
+                      columns={result.columns}
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      onFilteredIdsChange={setFilteredFeatureIds}
+                    />
+                    <ExportControls
+                      collection={collection}
+                      selectedId={selectedId}
+                      filteredIds={filteredFeatureIds}
+                      fileName={result.fileName}
+                      parseMode={parseMode}
+                      sourceProjection={sourceProjection}
+                      sourceProjectionLabel={sourceProjectionLabel}
+                    />
+                  </>
                 )}
               </section>
-              {collection && (
-                <ExportControls
-                  collection={collection}
-                  selectedId={selectedId}
-                  filteredIds={filteredFeatureIds}
-                  fileName={result.fileName}
-                  parseMode={parseMode}
-                  sourceProjection={sourceProjection}
-                  sourceProjectionLabel={sourceProjectionLabel}
-                />
-              )}
             </div>
           )}
           {inspection && !inspection.hasValidLayer && (

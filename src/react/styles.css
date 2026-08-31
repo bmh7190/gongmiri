@@ -197,6 +197,15 @@ button, select, input { accent-color: var(--color-primary); }
 }
 .react-drop-zone small { max-width: 430px; color: var(--color-text-muted); line-height: 1.5; }
 .react-status { min-height: 480px; padding: 24px; }
+.react-status.has-result {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.react-summary { display: grid; gap: 20px; }
 .react-progress > div, .react-columns article > div {
   display: flex;
   justify-content: space-between;
@@ -218,8 +227,13 @@ button, select, input { accent-color: var(--color-primary); }
 .react-progress__actions { justify-content: flex-end !important; margin-top: 10px; }
 .react-map-loading { min-height: 380px; display: grid; place-items: center; margin-bottom: 24px; border-radius: var(--radius-lg); color: var(--color-text-muted); background: var(--color-map-placeholder); }
 .react-result-tabs { display: none; }
-.react-result-panel { min-width: 0; }
-.react-result-panel + .react-result-panel { margin-top: 40px; }
+.react-result-panel {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  background: var(--color-surface);
+}
 .react-columns span, .react-columns small {
   color: var(--color-text-muted);
   font-size: 12px;
@@ -311,7 +325,6 @@ button, select, input { accent-color: var(--color-primary); }
     background: var(--color-primary);
   }
   .react-result-panel:not(.is-mobile-active) { display: none; }
-  .react-result-panel + .react-result-panel { margin-top: 0; }
 }
 
 @media (max-width: 480px) {
