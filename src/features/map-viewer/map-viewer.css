@@ -1,6 +1,6 @@
 .react-map { display: grid; gap: 12px; margin-bottom: 24px; }
 .react-map__header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-.react-map__header h2 { margin: 0; font-size: 18px; }
+.react-map__header h2 { margin: 0; font-size: 1.5em; }
 .react-map__header p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
 .react-map__status { border-radius: 999px; padding: 5px 9px; color: var(--color-text-muted); background: var(--color-surface-subtle); font-size: 11px; }
 .react-map__status.is-ready { color: var(--color-success); background: var(--color-success-soft); }
