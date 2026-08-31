@@ -60,7 +60,15 @@ button, select, input { accent-color: var(--color-primary); }
 }
 .react-skip-link:focus { transform: translateY(0); }
 
-.react-app { min-height: 100vh; padding: 28px; }
+.react-app {
+  width: 960px;
+  max-width: 100vw;
+  min-height: 680px;
+  margin-inline: auto;
+  padding: 24px;
+  container-name: viewer;
+  container-type: inline-size;
+}
 .react-header, .react-grid { max-width: 1180px; margin-inline: auto; }
 .react-header {
   margin-bottom: 20px;
@@ -242,6 +250,15 @@ button, select, input { accent-color: var(--color-primary); }
   background: var(--color-warning-soft);
   font-size: 10px;
   font-weight: 700;
+}
+
+@container viewer (max-width: 1000px) {
+  .react-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .react-header.has-dataset-controls { grid-template-columns: 1fr; }
+  .react-header.has-dataset-controls .react-header__actions { width: 100%; }
+  .react-header:not(.has-dataset-controls) .react-header__actions {
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 760px) {
