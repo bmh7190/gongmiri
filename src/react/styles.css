@@ -62,7 +62,6 @@ button, select, input { accent-color: var(--color-primary); }
 
 .react-app {
   width: 960px;
-  max-width: 100vw;
   min-height: 680px;
   margin-inline: auto;
   padding: 24px;
