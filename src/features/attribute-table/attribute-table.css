@@ -238,7 +238,7 @@
 }
 .react-table__row:hover { background: var(--color-primary-soft); }
 .react-table__row.is-selected { color: var(--color-text); background: var(--color-info-soft); box-shadow: inset 3px 0 var(--color-primary); }
-.react-table__row:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.react-table__row:focus-visible { z-index: 1; outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .react-table__row > span:first-child, .react-table__header > span:first-child { text-align: center; }
 .react-table__header > .is-pinned { position: sticky; z-index: 3; background: var(--color-surface-subtle); }
 .react-table__row > .is-pinned { position: sticky; z-index: 1; background: inherit; }
