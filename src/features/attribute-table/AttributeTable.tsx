@@ -200,72 +200,78 @@ export default function AttributeTable({
       </div>
 
       <div className="react-table__tools">
-        <label>
-          <span>{t("table.search")}</span>
-          <input
-            type="search"
-            value={query}
-            placeholder={t("table.searchPlaceholder")}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>{t("table.searchColumn")}</span>
-          <select value={searchColumn} onChange={(event) => setSearchColumn(event.target.value)}>
-            <option value="">{t("table.allColumns")}</option>
-            {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>{t("table.sortColumn")}</span>
-          <select value={sortColumn} onChange={(event) => setSortColumn(event.target.value)}>
-            <option value="">{t("table.originalOrder")}</option>
-            {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={!sortColumn}
-          aria-label={t("table.sortDirection")}
-          onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}
-        >
-          {sortDirection === "asc" ? t("table.ascending") : t("table.descending")}
-        </button>
-        <label>
-          <span>{t("table.filterColumn")}</span>
-          <select
-            value={filterColumn}
-            onChange={(event) => {
-              setFilterColumn(event.target.value);
-              setEmptyFilter("all");
-              setMinimum("");
-              setMaximum("");
-            }}
+        <div className="react-table__tool-row react-table__tool-row--primary">
+          <label>
+            <span>{t("table.search")}</span>
+            <input
+              type="search"
+              value={query}
+              placeholder={t("table.searchPlaceholder")}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>{t("table.searchColumn")}</span>
+            <select value={searchColumn} onChange={(event) => setSearchColumn(event.target.value)}>
+              <option value="">{t("table.allColumns")}</option>
+              {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>{t("table.sortColumn")}</span>
+            <select value={sortColumn} onChange={(event) => setSortColumn(event.target.value)}>
+              <option value="">{t("table.originalOrder")}</option>
+              {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="react-table__sort-direction"
+            disabled={!sortColumn}
+            aria-label={t("table.sortDirection")}
+            title={sortDirection === "asc" ? t("table.ascending") : t("table.descending")}
+            onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}
           >
-            <option value="">{t("table.noFilter")}</option>
-            {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>{t("table.emptyFilter")}</span>
-          <select
-            value={emptyFilter}
-            disabled={!filterColumn}
-            onChange={(event) => setEmptyFilter(event.target.value as EmptyValueFilter)}
-          >
-            <option value="all">{t("table.emptyAll")}</option>
-            <option value="empty">{t("table.emptyOnly")}</option>
-            <option value="filled">{t("table.filledOnly")}</option>
-          </select>
-        </label>
-        <label>
-          <span>{t("table.minimum")}</span>
-          <input type="number" value={minimum} disabled={!filterColumn} onChange={(event) => setMinimum(event.target.value)} />
-        </label>
-        <label>
-          <span>{t("table.maximum")}</span>
-          <input type="number" value={maximum} disabled={!filterColumn} onChange={(event) => setMaximum(event.target.value)} />
-        </label>
+            <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>
+          </button>
+        </div>
+        <div className="react-table__tool-row react-table__tool-row--filters">
+          <label>
+            <span>{t("table.filterColumn")}</span>
+            <select
+              value={filterColumn}
+              onChange={(event) => {
+                setFilterColumn(event.target.value);
+                setEmptyFilter("all");
+                setMinimum("");
+                setMaximum("");
+              }}
+            >
+              <option value="">{t("table.noFilter")}</option>
+              {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>{t("table.emptyFilter")}</span>
+            <select
+              value={emptyFilter}
+              disabled={!filterColumn}
+              onChange={(event) => setEmptyFilter(event.target.value as EmptyValueFilter)}
+            >
+              <option value="all">{t("table.emptyAll")}</option>
+              <option value="empty">{t("table.emptyOnly")}</option>
+              <option value="filled">{t("table.filledOnly")}</option>
+            </select>
+          </label>
+          <label>
+            <span>{t("table.minimum")}</span>
+            <input type="number" value={minimum} disabled={!filterColumn} onChange={(event) => setMinimum(event.target.value)} />
+          </label>
+          <label>
+            <span>{t("table.maximum")}</span>
+            <input type="number" value={maximum} disabled={!filterColumn} onChange={(event) => setMaximum(event.target.value)} />
+          </label>
+        </div>
       </div>
 
       <div

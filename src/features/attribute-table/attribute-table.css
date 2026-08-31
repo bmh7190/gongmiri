@@ -1,9 +1,12 @@
-.react-table { display: grid; gap: 12px; margin-top: 24px; }
-.react-table__title { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.react-table { display: grid; gap: 14px; }
+.react-table__title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .react-table__title h2 { margin: 0; font-size: 18px; }
 .react-table__title p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
 .react-table__title > span { border-radius: 999px; padding: 5px 9px; color: var(--color-info); background: var(--color-info-soft); font-size: 11px; }
-.react-table__tools { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); align-items: end; gap: 8px; }
+.react-table__tools { display: grid; gap: 10px; }
+.react-table__tool-row { display: grid; align-items: end; gap: 10px; }
+.react-table__tool-row--primary { grid-template-columns: minmax(210px, 1.6fr) minmax(130px, .9fr) minmax(130px, .9fr) 40px; }
+.react-table__tool-row--filters { grid-template-columns: minmax(150px, 1.2fr) minmax(125px, 1fr) minmax(90px, .7fr) minmax(90px, .7fr); }
 .react-table__tools label { display: grid; gap: 5px; min-width: 0; }
 .react-table__tools label > span { color: var(--color-text-muted); font-size: 11px; font-weight: 700; }
 .react-table__tools input, .react-table__tools select, .react-table__tools button {
@@ -16,6 +19,12 @@
   background: var(--color-surface);
 }
 .react-table__tools button { cursor: pointer; white-space: nowrap; }
+.react-table__sort-direction {
+  width: 40px;
+  padding: 0 !important;
+  font-size: 18px;
+  font-weight: 700;
+}
 .react-table__viewport {
   position: relative;
   max-height: 440px;
@@ -63,7 +72,8 @@
 .react-table__row:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .react-table__row span:first-child, .react-table__header span:first-child { position: sticky; left: 0; text-align: center; background: inherit; }
 @media (max-width: 760px) {
-  .react-table__tools { grid-template-columns: 1fr 1fr; }
-  .react-table__tools label:first-child { grid-column: 1 / -1; }
+  .react-table__tool-row--primary,
+  .react-table__tool-row--filters { grid-template-columns: 1fr 1fr; }
+  .react-table__tool-row--primary label:first-child { grid-column: 1 / -1; }
   .react-table__viewport { max-height: 360px; }
 }
