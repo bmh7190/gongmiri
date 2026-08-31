@@ -38,8 +38,8 @@ if (builtManifest.manifest_version !== 3) {
   throw new Error("빌드 산출물이 Manifest V3가 아닙니다.");
 }
 
-if (builtManifest.action?.default_popup) {
-  throw new Error("전체 화면 뷰어 구조에 default_popup이 다시 추가되었습니다.");
+if (builtManifest.action?.default_popup !== "extension/viewer.html") {
+  throw new Error("확장 아이콘에서 React 뷰어 팝업을 열도록 설정되지 않았습니다.");
 }
 
 if (builtManifest.permissions?.includes("downloads")) {
@@ -52,7 +52,7 @@ if (!builtManifest.optional_permissions?.includes("downloads")) {
 
 const requiredPaths = [
   [builtManifest.background?.service_worker, "서비스 워커"],
-  ["extension/viewer.html", "React 뷰어"],
+  [builtManifest.action.default_popup, "React 뷰어 팝업"],
   ...Object.entries(builtManifest.icons ?? {}).map(([size, path]) => [path, `${size}px 아이콘`]),
 ];
 

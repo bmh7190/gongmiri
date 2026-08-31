@@ -10,12 +10,6 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log("[gongmiri] installed");
 });
 
-chrome.action.onClicked.addListener(async () => {
-  await chrome.action.setBadgeText({ text: "" });
-  const url = chrome.runtime.getURL("extension/viewer.html");
-  await chrome.tabs.create({ url });
-});
-
 const handleDownloadChanged = async (delta: chrome.downloads.DownloadDelta) => {
   if (delta.state?.current !== "complete") return;
   try {
