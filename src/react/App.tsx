@@ -367,7 +367,9 @@ export default function App() {
       <a className="react-skip-link" href="#viewer-content">
         {t("common.skipToContent")}
       </a>
-      <header className="react-header">
+      <header
+        className={`react-header${inspection?.hasValidLayer ? " has-dataset-controls" : ""}`}
+      >
         <div>
           <p className="react-eyebrow">
             {t("app.name")} · {t("app.tagline")}
