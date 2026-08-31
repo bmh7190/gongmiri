@@ -23,7 +23,11 @@ import DatasetControls from "../features/dataset-controls/DatasetControls";
 import DatasetSummary from "../features/dataset-summary/DatasetSummary";
 import VisualizationControls from "../features/visualization/VisualizationControls";
 import ExportControls from "../features/export/ExportControls";
-import DownloadDetection from "../features/download-detection/DownloadDetection";
+import {
+  DownloadDetectionPrompt,
+  DownloadDetectionToggle,
+  useDownloadDetection,
+} from "../features/download-detection/DownloadDetection";
 import {
   buildCategoryStops,
   buildNumericStops,
@@ -62,6 +66,7 @@ const createDefaultVisualization = (): VisualizationSettings => ({
 export default function App() {
   const { t, i18n } = useTranslation();
   const [theme, setTheme] = useState<AppTheme>(getInitialTheme);
+  const downloadDetection = useDownloadDetection();
   const { parse, progress, cancel } = useParserWorker();
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -392,9 +397,10 @@ export default function App() {
             />
           )}
           <div className="react-header__preferences">
+            <DownloadDetectionToggle detection={downloadDetection} />
             <button
               type="button"
-              className="react-theme-toggle"
+              className="react-icon-button react-theme-toggle"
               aria-label={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
               title={t(theme === "light" ? "app.switchToDark" : "app.switchToLight")}
               onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
@@ -429,7 +435,7 @@ export default function App() {
         </div>
       </header>
 
-      <DownloadDetection />
+      <DownloadDetectionPrompt detection={downloadDetection} />
 
       <section
         id="viewer-content"
