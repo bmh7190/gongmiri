@@ -6,7 +6,8 @@
   "default_locale": "ko",
 
   "action": {
-    "default_title": "__MSG_openViewer__"
+    "default_title": "__MSG_openViewer__",
+    "default_popup": "extension/viewer.html"
   },
 
   "permissions": ["storage"],
