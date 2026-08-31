@@ -150,6 +150,7 @@ export default function App() {
   const hasActivity = Boolean(
     inspection || result || progress || error || requiresSrid || isLoading,
   );
+  const showDropZone = !hasActivity || Boolean(error);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -433,31 +434,31 @@ export default function App() {
       <section
         id="viewer-content"
         tabIndex={-1}
-        className={`react-grid${hasActivity ? "" : " is-empty"}`}
+        className={`react-grid${hasActivity ? "" : " is-empty"}${showDropZone ? "" : " is-viewer"}`}
       >
-        <label
-          className={`react-drop-zone${isDragging ? " is-dragging" : ""}${isLoading ? " is-loading" : ""}`}
-          aria-disabled={isLoading}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragOver={(event) => event.preventDefault()}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-        >
-          <input
-            type="file"
-            accept=".zip,application/zip"
-            disabled={isLoading}
-            onChange={handleInput}
-          />
-          <strong>
-            {isLoading ? t("upload.analyzing") : t("upload.dropZip")}
-          </strong>
-          {!isLoading && <span>{t("upload.chooseFile")}</span>}
-          {!hasActivity && <small>{t("upload.localOnly")}</small>}
-        </label>
+        {showDropZone && (
+          <label
+            className={`react-drop-zone${isDragging ? " is-dragging" : ""}${isLoading ? " is-loading" : ""}`}
+            aria-disabled={isLoading}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+          >
+            <input
+              type="file"
+              accept=".zip,application/zip"
+              disabled={isLoading}
+              onChange={handleInput}
+            />
+            <strong>{t("upload.dropZip")}</strong>
+            <span>{t("upload.chooseFile")}</span>
+            {!hasActivity && <small>{t("upload.localOnly")}</small>}
+          </label>
+        )}
 
         <div className="react-status" aria-busy={isLoading}>
           {progress && (
