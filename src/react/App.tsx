@@ -375,19 +375,6 @@ export default function App() {
           <h1>{t("app.title")}</h1>
         </div>
         <div className="react-header__actions">
-          {inspection?.hasValidLayer && (
-            <DatasetControls
-              inspection={inspection}
-              encoding={encoding}
-              sridOverride={sridOverride}
-              requiresSrid={requiresSrid}
-              disabled={isLoading}
-              parseMode={parseMode}
-              onEncodingChange={handleEncodingChange}
-              onSridChange={handleSridChange}
-              onParseModeChange={handleParseModeChange}
-            />
-          )}
           <button
             type="button"
             className="react-theme-toggle"
@@ -425,6 +412,22 @@ export default function App() {
       </header>
 
       <DownloadDetection />
+
+      {inspection?.hasValidLayer && (
+        <div className="react-dataset-toolbar">
+          <DatasetControls
+            inspection={inspection}
+            encoding={encoding}
+            sridOverride={sridOverride}
+            requiresSrid={requiresSrid}
+            disabled={isLoading}
+            parseMode={parseMode}
+            onEncodingChange={handleEncodingChange}
+            onSridChange={handleSridChange}
+            onParseModeChange={handleParseModeChange}
+          />
+        </div>
+      )}
 
       <section
         id="viewer-content"
