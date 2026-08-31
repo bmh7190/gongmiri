@@ -169,6 +169,10 @@ export default function AttributeTable({
   });
   const rows = table.getRowModel().rows;
   const visibleColumns = table.getVisibleLeafColumns();
+  const dataColumns = table
+    .getAllLeafColumns()
+    .filter((column) => column.id !== "__rowNumber");
+  const visibleDataColumnCount = dataColumns.filter((column) => column.getIsVisible()).length;
   const rowTemplate = visibleColumns
     .map((column) => `${column.getSize()}px`)
     .join(" ");
@@ -234,7 +238,37 @@ export default function AttributeTable({
             })}
           </p>
         </div>
-        <span>{t("table.virtualized")}</span>
+        <div className="react-table__title-actions">
+          <details className="react-table__column-manager">
+            <summary>
+              {t("table.columns")} {visibleDataColumnCount}/{dataColumns.length}
+            </summary>
+            <div className="react-table__column-menu">
+              <div>
+                <strong>{t("table.columnVisibility")}</strong>
+                <button
+                  type="button"
+                  onClick={() => dataColumns.forEach((column) => column.toggleVisibility(true))}
+                >
+                  {t("table.showAllColumns")}
+                </button>
+              </div>
+              <div className="react-table__column-list">
+                {dataColumns.map((column) => (
+                  <label key={column.id}>
+                    <input
+                      type="checkbox"
+                      checked={column.getIsVisible()}
+                      onChange={column.getToggleVisibilityHandler()}
+                    />
+                    <span title={column.id}>{column.id}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </details>
+          <span className="react-table__virtual-badge">{t("table.virtualized")}</span>
+        </div>
       </div>
 
       <div className="react-table__tools">
@@ -303,7 +337,7 @@ export default function AttributeTable({
         className="react-table__viewport"
         role="grid"
         aria-rowcount={rows.length}
-        aria-colcount={columnOrder.length + 1}
+        aria-colcount={visibleColumns.length}
       >
         {table.getHeaderGroups().map((headerGroup) => (
           <div
