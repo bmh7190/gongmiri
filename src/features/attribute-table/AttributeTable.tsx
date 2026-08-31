@@ -1,8 +1,6 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type KeyboardEvent,
 } from "react";
@@ -37,7 +35,6 @@ import {
   useTable,
   type Column,
 } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   ColumnStat,
   FeatureCollectionGeometry,
@@ -51,9 +48,7 @@ import {
 } from "../../domain/attribute-rows";
 import "./attribute-table.css";
 
-const ROW_HEIGHT = 34;
-const HEADER_HEIGHT = 36;
-const BUFFER_ROWS = 8;
+const ROWS_PER_PAGE = 100;
 const WIDTH_SAMPLE_LIMIT = 400;
 
 const TABLE_FEATURES = tableFeatures({
@@ -177,13 +172,13 @@ export default function AttributeTable({
   onFilteredIdsChange,
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
-  const viewportRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
   const [emptyFilter, setEmptyFilter] = useState<EmptyValueFilter>("all");
   const [minimum, setMinimum] = useState("");
   const [maximum, setMaximum] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
 
   const sourceRows = useMemo(
     () =>
@@ -281,49 +276,17 @@ export default function AttributeTable({
   const rowTemplate = visibleColumns
     .map((column) => `${column.getSize()}px`)
     .join(" ");
-  const getRowKey = useCallback(
-    (index: number) => rows[index]?.original.id ?? index,
-    [rows],
-  );
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => viewportRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    getItemKey: getRowKey,
-    overscan: BUFFER_ROWS,
-    scrollMargin: HEADER_HEIGHT,
-    useFlushSync: false,
-  });
-  const virtualRows = rowVirtualizer.getVirtualItems();
+  const pageCount = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
+  const pageStart = pageIndex * ROWS_PER_PAGE;
+  const pageRows = rows.slice(pageStart, pageStart + ROWS_PER_PAGE);
+
+  useEffect(() => {
+    setPageIndex((current) => Math.min(current, pageCount - 1));
+  }, [pageCount]);
 
   useEffect(() => {
     onFilteredIdsChange?.(rows.map((row) => row.original.id));
   }, [onFilteredIdsChange, rows]);
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    const handleWheel = (event: WheelEvent) => {
-      if (event.ctrlKey) return;
-
-      const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-        ? ROW_HEIGHT
-        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-          ? viewport.clientHeight
-          : 1;
-
-      event.preventDefault();
-      event.stopPropagation();
-      viewport.scrollBy({
-        left: event.deltaX * multiplier,
-        top: event.deltaY * multiplier,
-      });
-    };
-
-    viewport.addEventListener("wheel", handleWheel, { passive: false });
-    return () => viewport.removeEventListener("wheel", handleWheel);
-  }, []);
 
   const handleRowKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -336,7 +299,10 @@ export default function AttributeTable({
       Math.max(0, index + (event.key === "ArrowDown" ? 1 : -1)),
     );
     const next = rows[nextIndex];
-    if (next) onSelect(next.original.id);
+    if (next) {
+      setPageIndex(Math.floor(nextIndex / ROWS_PER_PAGE));
+      onSelect(next.original.id);
+    }
   };
 
   return (
@@ -392,7 +358,6 @@ export default function AttributeTable({
               </div>
             </div>
           </details>
-          <span className="react-table__virtual-badge">{t("table.virtualized")}</span>
         </div>
       </div>
 
@@ -458,7 +423,6 @@ export default function AttributeTable({
       </div>
 
       <div
-        ref={viewportRef}
         className="react-table__viewport"
         role="grid"
         aria-rowcount={rows.length}
@@ -521,14 +485,9 @@ export default function AttributeTable({
             })}
           </div>
         ))}
-        <div
-          className="react-table__spacer"
-          style={{ height: rowVirtualizer.getTotalSize() }}
-        >
-          {virtualRows.map((virtualRow) => {
-              const row = rows[virtualRow.index];
-              if (!row) return null;
-              const absoluteIndex = virtualRow.index;
+        <div className="react-table__body">
+          {pageRows.map((row, pageRowIndex) => {
+              const absoluteIndex = pageStart + pageRowIndex;
               const selected = row.original.id === selectedId;
               return (
                 <button
@@ -540,7 +499,6 @@ export default function AttributeTable({
                   className={`react-table__row${selected ? " is-selected" : ""}`}
                   style={{
                     gridTemplateColumns: rowTemplate,
-                    transform: `translateY(${virtualRow.start - HEADER_HEIGHT}px)`,
                   }}
                   onClick={() => onSelect(row.original.id)}
                   onKeyDown={(event) => handleRowKeyDown(event, absoluteIndex)}
@@ -582,6 +540,25 @@ export default function AttributeTable({
             })}
         </div>
       </div>
+      {pageCount > 1 && (
+        <nav className="react-table__pagination" aria-label={t("table.pagination")}>
+          <button
+            type="button"
+            disabled={pageIndex === 0}
+            onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+          >
+            {t("table.previousPage")}
+          </button>
+          <span>{t("table.pageStatus", { current: pageIndex + 1, total: pageCount })}</span>
+          <button
+            type="button"
+            disabled={pageIndex >= pageCount - 1}
+            onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
+          >
+            {t("table.nextPage")}
+          </button>
+        </nav>
+      )}
     </section>
   );
 }
