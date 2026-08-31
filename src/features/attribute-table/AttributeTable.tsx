@@ -8,6 +8,23 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   columnOrderingFeature,
   columnPinningFeature,
   columnResizingFeature,
@@ -18,6 +35,7 @@ import {
   rowSortingFeature,
   tableFeatures,
   useTable,
+  type Column,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
@@ -48,6 +66,77 @@ const TABLE_FEATURES = tableFeatures({
   sortedRowModel: createSortedRowModel(),
 });
 const columnHelper = createColumnHelper<typeof TABLE_FEATURES, AttributeRow>();
+
+type AttributeColumn = Column<typeof TABLE_FEATURES, AttributeRow, unknown>;
+
+type SortableColumnOptionProps = {
+  column: AttributeColumn;
+  moveLabel: string;
+  pinStartLabel: string;
+  pinEndLabel: string;
+};
+
+function SortableColumnOption({
+  column,
+  moveLabel,
+  pinStartLabel,
+  pinEndLabel,
+}: SortableColumnOptionProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: column.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`react-table__column-option${isDragging ? " is-dragging" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <button
+        type="button"
+        className="react-table__drag-handle"
+        aria-label={moveLabel}
+        {...attributes}
+        {...listeners}
+      >
+        ⠿
+      </button>
+      <label>
+        <input
+          type="checkbox"
+          checked={column.getIsVisible()}
+          onChange={column.getToggleVisibilityHandler()}
+        />
+        <span title={column.id}>{column.id}</span>
+      </label>
+      <div className="react-table__pin-actions">
+        <button
+          type="button"
+          className={column.getIsPinned() === "start" ? "is-active" : ""}
+          aria-label={pinStartLabel}
+          aria-pressed={column.getIsPinned() === "start"}
+          onClick={() => column.pin(column.getIsPinned() === "start" ? false : "start")}
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          className={column.getIsPinned() === "end" ? "is-active" : ""}
+          aria-label={pinEndLabel}
+          aria-pressed={column.getIsPinned() === "end"}
+          onClick={() => column.pin(column.getIsPinned() === "end" ? false : "end")}
+        >
+          →
+        </button>
+      </div>
+    </div>
+  );
+}
 
 type AttributeTableProps = {
   collection: FeatureCollectionGeometry;
@@ -177,6 +266,18 @@ export default function AttributeTable({
     .getAllLeafColumns()
     .filter((column) => column.id !== "__rowNumber");
   const visibleDataColumnCount = dataColumns.filter((column) => column.getIsVisible()).length;
+  const dragSensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const handleColumnDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const order = dataColumns.map((column) => column.id);
+    const previousIndex = order.indexOf(String(active.id));
+    const nextIndex = order.indexOf(String(over.id));
+    if (previousIndex < 0 || nextIndex < 0) return;
+    table.setColumnOrder(["__rowNumber", ...arrayMove(order, previousIndex, nextIndex)]);
+  };
   const rowTemplate = visibleColumns
     .map((column) => `${column.getSize()}px`)
     .join(" ");
@@ -258,38 +359,26 @@ export default function AttributeTable({
                 </button>
               </div>
               <div className="react-table__column-list">
-                {dataColumns.map((column) => (
-                  <div key={column.id} className="react-table__column-option">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={column.getIsVisible()}
-                        onChange={column.getToggleVisibilityHandler()}
+                <DndContext
+                  sensors={dragSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleColumnDragEnd}
+                >
+                  <SortableContext
+                    items={dataColumns.map((column) => column.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {dataColumns.map((column) => (
+                      <SortableColumnOption
+                        key={column.id}
+                        column={column}
+                        moveLabel={t("table.moveColumn", { column: column.id })}
+                        pinStartLabel={t("table.pinColumnStart", { column: column.id })}
+                        pinEndLabel={t("table.pinColumnEnd", { column: column.id })}
                       />
-                      <span title={column.id}>{column.id}</span>
-                    </label>
-                    <div className="react-table__pin-actions">
-                      <button
-                        type="button"
-                        className={column.getIsPinned() === "start" ? "is-active" : ""}
-                        aria-label={t("table.pinColumnStart", { column: column.id })}
-                        aria-pressed={column.getIsPinned() === "start"}
-                        onClick={() => column.pin(column.getIsPinned() === "start" ? false : "start")}
-                      >
-                        ←
-                      </button>
-                      <button
-                        type="button"
-                        className={column.getIsPinned() === "end" ? "is-active" : ""}
-                        aria-label={t("table.pinColumnEnd", { column: column.id })}
-                        aria-pressed={column.getIsPinned() === "end"}
-                        onClick={() => column.pin(column.getIsPinned() === "end" ? false : "end")}
-                      >
-                        →
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                    ))}
+                  </SortableContext>
+                </DndContext>
               </div>
             </div>
           </details>

@@ -47,8 +47,22 @@
   cursor: pointer;
 }
 .react-table__column-list { display: grid; gap: 4px; }
-.react-table__column-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; border-radius: 7px; }
+.react-table__column-option { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 4px; border-radius: 7px; }
 .react-table__column-option:hover { background: var(--color-primary-soft); }
+.react-table__column-option.is-dragging { z-index: 1; background: var(--color-info-soft); box-shadow: 0 4px 12px rgba(15, 23, 42, .12); }
+.react-table__drag-handle {
+  width: 22px;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+}
+.react-table__drag-handle:active { cursor: grabbing; }
+.react-table__drag-handle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .react-table__column-option > label {
   display: flex;
   min-width: 0;
