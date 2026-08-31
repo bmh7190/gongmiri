@@ -92,12 +92,15 @@ button, select, input { accent-color: var(--color-primary); }
   font-weight: 700;
 }
 .react-language select {
-  min-height: 38px;
+  min-width: 100px;
+  min-height: 34px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  padding: 0 30px 0 10px;
+  padding: 0 26px 0 9px;
   color: var(--color-text);
   background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 700;
 }
 .react-grid {
   display: grid;
