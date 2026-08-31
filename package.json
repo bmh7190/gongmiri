@@ -20,6 +20,8 @@
     "benchmark:polygon": "node scripts/parse-benchmark.mjs --scenario=polygons-500k-coords --quick"
   },
   "dependencies": {
+    "@tanstack/react-table": "^9.2.4",
+    "@tanstack/react-virtual": "^3.14.10",
     "but-unzip": "^0.1.7",
     "geojson-vt": "^4.0.2",
     "i18next": "^25.10.10",

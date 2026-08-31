@@ -1,29 +1,53 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
-  type UIEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  columnOrderingFeature,
+  columnPinningFeature,
+  columnResizingFeature,
+  columnSizingFeature,
+  columnVisibilityFeature,
+  createColumnHelper,
+  createSortedRowModel,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
+} from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   ColumnStat,
   FeatureCollectionGeometry,
   FeatureId,
 } from "../../domain/types";
 import {
+  compareAttributeValues,
   exploreAttributeRows,
+  type AttributeRow,
   type EmptyValueFilter,
-  type RowSortDirection,
 } from "../../domain/attribute-rows";
 import "./attribute-table.css";
 
 const ROW_HEIGHT = 34;
 const HEADER_HEIGHT = 36;
 const BUFFER_ROWS = 8;
-const DEFAULT_HEIGHT = 420;
 const WIDTH_SAMPLE_LIMIT = 400;
+
+const TABLE_FEATURES = tableFeatures({
+  columnOrderingFeature,
+  columnPinningFeature,
+  columnResizingFeature,
+  columnSizingFeature,
+  columnVisibilityFeature,
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+});
+const columnHelper = createColumnHelper<typeof TABLE_FEATURES, AttributeRow>();
 
 type AttributeTableProps = {
   collection: FeatureCollectionGeometry;
@@ -65,12 +89,8 @@ export default function AttributeTable({
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(DEFAULT_HEIGHT);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
-  const [sortColumn, setSortColumn] = useState("");
-  const [sortDirection, setSortDirection] = useState<RowSortDirection>("asc");
   const [filterColumn, setFilterColumn] = useState("");
   const [emptyFilter, setEmptyFilter] = useState<EmptyValueFilter>("all");
   const [minimum, setMinimum] = useState("");
@@ -91,13 +111,13 @@ export default function AttributeTable({
         : Object.keys(sourceRows[0]?.properties ?? {}),
     [columns, sourceRows],
   );
-  const rows = useMemo(
+  const filteredRows = useMemo(
     () => exploreAttributeRows(
       sourceRows,
       query,
       searchColumn || null,
-      sortColumn || null,
-      sortDirection,
+      null,
+      "asc",
       {
         column: filterColumn || null,
         empty: emptyFilter,
@@ -105,69 +125,87 @@ export default function AttributeTable({
         max: maximum === "" ? null : Number(maximum),
       },
     ),
-    [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, sortColumn, sortDirection, sourceRows],
+    [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, sourceRows],
   );
+  const tableColumns = useMemo(() => {
+    const stride = Math.max(1, Math.floor(filteredRows.length / WIDTH_SAMPLE_LIMIT));
+    const sample = filteredRows
+      .filter((_, index) => index % stride === 0)
+      .slice(0, WIDTH_SAMPLE_LIMIT);
+    return columnHelper.columns([
+      columnHelper.display({
+        id: "__rowNumber",
+        header: "",
+        size: 54,
+        enableSorting: false,
+      }),
+      ...columnOrder.map((column) => columnHelper.accessor(
+        (row) => row.properties[column],
+        {
+          id: column,
+          header: column || t("table.unnamed"),
+          cell: (cell) => formatCell(cell.getValue()),
+          size: estimateWidth([
+            column,
+            ...sample.map((row) => row.properties[column]),
+          ]),
+          sortFn: (left, right) => compareAttributeValues(
+            left.original.properties[column],
+            right.original.properties[column],
+          ),
+          sortUndefined: "last",
+        },
+      )),
+    ]);
+  }, [columnOrder, filteredRows, t]);
+  const table = useTable({
+    features: TABLE_FEATURES,
+    columns: tableColumns,
+    data: filteredRows,
+    getRowId: (row) => row.id,
+    enableMultiSort: false,
+    enableSortingRemoval: true,
+    sortDescFirst: false,
+  });
+  const rows = table.getRowModel().rows;
+  const visibleColumns = table.getVisibleLeafColumns();
+  const rowTemplate = visibleColumns
+    .map((column) => `${column.getSize()}px`)
+    .join(" ");
   const idIndex = useMemo(
-    () => new Map(rows.map((row, index) => [row.id, index])),
+    () => new Map(rows.map((row, index) => [row.original.id, index])),
     [rows],
   );
-  const rowTemplate = useMemo(() => {
-    const stride = Math.max(1, Math.floor(rows.length / WIDTH_SAMPLE_LIMIT));
-    const sample = rows.filter((_, index) => index % stride === 0).slice(0, WIDTH_SAMPLE_LIMIT);
-    const widths = columnOrder.map((column) =>
-      estimateWidth([column, ...sample.map((row) => row.properties[column])]),
-    );
-    return ["54px", ...widths.map((width) => `${width}px`)].join(" ");
-  }, [columnOrder, rows]);
-
-  const effectiveScrollTop = Math.max(0, scrollTop - HEADER_HEIGHT);
-  const startIndex = Math.max(
-    0,
-    Math.floor(effectiveScrollTop / ROW_HEIGHT) - BUFFER_ROWS,
+  const getRowKey = useCallback(
+    (index: number) => rows[index]?.original.id ?? index,
+    [rows],
   );
-  const endIndex = Math.min(
-    rows.length,
-    startIndex + Math.ceil(viewportHeight / ROW_HEIGHT) + BUFFER_ROWS * 2,
-  );
-  const visibleRows = rows.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const observer = new ResizeObserver(() => {
-      setViewportHeight(viewport.clientHeight || DEFAULT_HEIGHT);
-    });
-    setViewportHeight(viewport.clientHeight || DEFAULT_HEIGHT);
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, []);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => viewportRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    getItemKey: getRowKey,
+    overscan: BUFFER_ROWS,
+    scrollMargin: HEADER_HEIGHT,
+    useFlushSync: false,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (viewport) viewport.scrollTop = 0;
-    setScrollTop(0);
-  }, [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, sortColumn, sortDirection]);
+  }, [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, table.state.sorting]);
 
   useEffect(() => {
-    onFilteredIdsChange?.(rows.map((row) => row.id));
+    onFilteredIdsChange?.(rows.map((row) => row.original.id));
   }, [onFilteredIdsChange, rows]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     const index = selectedId ? idIndex.get(selectedId) : undefined;
     if (!viewport || index === undefined) return;
-    const top = index * ROW_HEIGHT;
-    const bottom = top + ROW_HEIGHT;
-    if (top < effectiveScrollTop) {
-      viewport.scrollTop = top + HEADER_HEIGHT;
-    } else if (bottom > effectiveScrollTop + viewport.clientHeight - HEADER_HEIGHT) {
-      viewport.scrollTop = bottom - viewport.clientHeight + HEADER_HEIGHT;
-    }
-  }, [idIndex, selectedId]);
-
-  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
-  };
+    rowVirtualizer.scrollToIndex(index, { align: "auto" });
+  }, [idIndex, rowVirtualizer, selectedId]);
 
   const handleRowKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -180,7 +218,7 @@ export default function AttributeTable({
       Math.max(0, index + (event.key === "ArrowDown" ? 1 : -1)),
     );
     const next = rows[nextIndex];
-    if (next) onSelect(next.id);
+    if (next) onSelect(next.original.id);
   };
 
   return (
@@ -217,61 +255,47 @@ export default function AttributeTable({
               {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
             </select>
           </label>
-          <label>
-            <span>{t("table.sortColumn")}</span>
-            <select value={sortColumn} onChange={(event) => setSortColumn(event.target.value)}>
-              <option value="">{t("table.originalOrder")}</option>
-              {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="react-table__sort-direction"
-            disabled={!sortColumn}
-            aria-label={t("table.sortDirection")}
-            title={sortDirection === "asc" ? t("table.ascending") : t("table.descending")}
-            onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}
-          >
-            <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>
-          </button>
         </div>
-        <div className="react-table__tool-row react-table__tool-row--filters">
-          <label>
-            <span>{t("table.filterColumn")}</span>
-            <select
-              value={filterColumn}
-              onChange={(event) => {
-                setFilterColumn(event.target.value);
-                setEmptyFilter("all");
-                setMinimum("");
-                setMaximum("");
-              }}
-            >
-              <option value="">{t("table.noFilter")}</option>
-              {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>{t("table.emptyFilter")}</span>
-            <select
-              value={emptyFilter}
-              disabled={!filterColumn}
-              onChange={(event) => setEmptyFilter(event.target.value as EmptyValueFilter)}
-            >
-              <option value="all">{t("table.emptyAll")}</option>
-              <option value="empty">{t("table.emptyOnly")}</option>
-              <option value="filled">{t("table.filledOnly")}</option>
-            </select>
-          </label>
-          <label>
-            <span>{t("table.minimum")}</span>
-            <input type="number" value={minimum} disabled={!filterColumn} onChange={(event) => setMinimum(event.target.value)} />
-          </label>
-          <label>
-            <span>{t("table.maximum")}</span>
-            <input type="number" value={maximum} disabled={!filterColumn} onChange={(event) => setMaximum(event.target.value)} />
-          </label>
-        </div>
+        <details className={`react-table__filters${filterColumn ? " is-active" : ""}`}>
+          <summary>{t("table.filters")}</summary>
+          <div className="react-table__tool-row react-table__tool-row--filters">
+            <label>
+              <span>{t("table.filterColumn")}</span>
+              <select
+                value={filterColumn}
+                onChange={(event) => {
+                  setFilterColumn(event.target.value);
+                  setEmptyFilter("all");
+                  setMinimum("");
+                  setMaximum("");
+                }}
+              >
+                <option value="">{t("table.noFilter")}</option>
+                {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>{t("table.emptyFilter")}</span>
+              <select
+                value={emptyFilter}
+                disabled={!filterColumn}
+                onChange={(event) => setEmptyFilter(event.target.value as EmptyValueFilter)}
+              >
+                <option value="all">{t("table.emptyAll")}</option>
+                <option value="empty">{t("table.emptyOnly")}</option>
+                <option value="filled">{t("table.filledOnly")}</option>
+              </select>
+            </label>
+            <label>
+              <span>{t("table.minimum")}</span>
+              <input type="number" value={minimum} disabled={!filterColumn} onChange={(event) => setMinimum(event.target.value)} />
+            </label>
+            <label>
+              <span>{t("table.maximum")}</span>
+              <input type="number" value={maximum} disabled={!filterColumn} onChange={(event) => setMaximum(event.target.value)} />
+            </label>
+          </div>
+        </details>
       </div>
 
       <div
@@ -280,31 +304,53 @@ export default function AttributeTable({
         role="grid"
         aria-rowcount={rows.length}
         aria-colcount={columnOrder.length + 1}
-        onScroll={handleScroll}
       >
-        <div
-          className="react-table__header"
-          role="row"
-          style={{ gridTemplateColumns: rowTemplate }}
-        >
-          <span role="columnheader" aria-label={t("table.rowNumber")} />
-          {columnOrder.map((column) => (
-            <span key={column} role="columnheader" title={column}>
-              {column || t("table.unnamed")}
-            </span>
-          ))}
-        </div>
+        {table.getHeaderGroups().map((headerGroup) => (
+          <div
+            key={headerGroup.id}
+            className="react-table__header"
+            role="row"
+            style={{ gridTemplateColumns: rowTemplate }}
+          >
+            {headerGroup.headers.map((header) => {
+              const sorted = header.column.getIsSorted();
+              if (header.column.id === "__rowNumber") {
+                return (
+                  <span
+                    key={header.id}
+                    role="columnheader"
+                    aria-label={t("table.rowNumber")}
+                  />
+                );
+              }
+              return (
+                <span
+                  key={header.id}
+                  role="columnheader"
+                  aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
+                >
+                  <button
+                    type="button"
+                    title={header.column.id}
+                    onClick={header.column.getToggleSortingHandler()}
+                  >
+                    <span>{header.column.id}</span>
+                    {sorted && <i aria-hidden="true">{sorted === "asc" ? "↑" : "↓"}</i>}
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        ))}
         <div
           className="react-table__spacer"
-          style={{ height: rows.length * ROW_HEIGHT }}
+          style={{ height: rowVirtualizer.getTotalSize() }}
         >
-          <div
-            className="react-table__virtual"
-            style={{ transform: `translateY(${startIndex * ROW_HEIGHT}px)` }}
-          >
-            {visibleRows.map((row, localIndex) => {
-              const absoluteIndex = startIndex + localIndex;
-              const selected = row.id === selectedId;
+          {virtualRows.map((virtualRow) => {
+              const row = rows[virtualRow.index];
+              if (!row) return null;
+              const absoluteIndex = virtualRow.index;
+              const selected = row.original.id === selectedId;
               return (
                 <button
                   key={row.id}
@@ -313,23 +359,27 @@ export default function AttributeTable({
                   aria-rowindex={absoluteIndex + 1}
                   aria-selected={selected}
                   className={`react-table__row${selected ? " is-selected" : ""}`}
-                  style={{ gridTemplateColumns: rowTemplate }}
-                  onClick={() => onSelect(row.id)}
+                  style={{
+                    gridTemplateColumns: rowTemplate,
+                    transform: `translateY(${virtualRow.start - HEADER_HEIGHT}px)`,
+                  }}
+                  onClick={() => onSelect(row.original.id)}
                   onKeyDown={(event) => handleRowKeyDown(event, absoluteIndex)}
                 >
-                  <span role="gridcell">{absoluteIndex + 1}</span>
-                  {columnOrder.map((column) => {
-                    const value = formatCell(row.properties[column]);
+                  {row.getVisibleCells().map((cell) => {
+                    if (cell.column.id === "__rowNumber") {
+                      return <span key={cell.id} role="gridcell">{absoluteIndex + 1}</span>;
+                    }
+                    const value = formatCell(cell.getValue());
                     return (
-                      <span key={column} role="gridcell" title={value}>
-                        {value}
+                      <span key={cell.id} role="gridcell" title={value}>
+                        <table.FlexRender cell={cell} />
                       </span>
                     );
                   })}
                 </button>
               );
             })}
-          </div>
         </div>
       </div>
     </section>
