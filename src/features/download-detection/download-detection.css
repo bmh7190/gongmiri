@@ -14,7 +14,7 @@
 .react-download-detection h2 { margin: 0; font-size: 15px; }
 .react-download-detection p { margin: 5px 0 0; color: var(--color-text); font-size: 13px; }
 .react-download-detection small { display: block; margin-top: 5px; color: var(--color-text-muted); }
-.react-download-detection button {
+.react-download-detection > button {
   min-height: 40px;
   border: 1px solid var(--color-primary);
   border-radius: 9px;
@@ -23,10 +23,9 @@
   background: var(--color-primary);
   cursor: pointer;
 }
-.react-download-detection button[aria-pressed="true"] { color: var(--color-info); background: var(--color-surface); }
 .react-download-detection > p { grid-column: 1 / -1; }
 .react-download-detection__recent { font-weight: 700; }
 @media (max-width: 600px) {
   .react-download-detection { grid-template-columns: 1fr; }
-  .react-download-detection button { width: 100%; }
+  .react-download-detection > button { width: 100%; }
 }

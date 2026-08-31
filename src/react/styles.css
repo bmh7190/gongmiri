@@ -95,7 +95,7 @@ button, select, input { accent-color: var(--color-primary); }
   min-width: 0;
 }
 .react-header__preferences { display: flex; align-items: flex-start; gap: 8px; margin-left: auto; }
-.react-theme-toggle {
+.react-icon-button {
   align-self: flex-end;
   width: 34px;
   height: 34px;
@@ -108,8 +108,8 @@ button, select, input { accent-color: var(--color-primary); }
   background: var(--color-surface);
   cursor: pointer;
 }
-.react-theme-toggle:hover { border-color: var(--color-primary); color: var(--color-primary); }
-.react-theme-toggle svg {
+.react-icon-button:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.react-icon-button svg {
   width: 17px;
   height: 17px;
   fill: none;
