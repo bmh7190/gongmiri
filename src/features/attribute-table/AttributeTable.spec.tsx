@@ -63,6 +63,9 @@ describe("AttributeTable", () => {
     expect(html).toContain('title="score"');
     expect(html).toContain("Resize name column");
     expect(html).toContain("Double-click to reset width");
+    expect(html).toContain("Pin name column left");
+    expect(html).toContain("Pin score column right");
+    expect(html).toContain('aria-pressed="false"');
     expect(html).not.toContain("Sort column");
   });
 });
