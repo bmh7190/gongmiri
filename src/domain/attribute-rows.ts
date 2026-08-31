@@ -24,7 +24,7 @@ const searchableValue = (value: unknown): string => {
   return String(value);
 };
 
-const compareValues = (left: unknown, right: unknown): number => {
+export const compareAttributeValues = (left: unknown, right: unknown): number => {
   const leftEmpty = left === null || left === undefined || left === "";
   const rightEmpty = right === null || right === undefined || right === "";
   if (leftEmpty || rightEmpty) {
@@ -75,7 +75,7 @@ export const exploreAttributeRows = (
   return filtered
     .map((row, index) => ({ row, index }))
     .sort((left, right) => {
-      const compared = compareValues(
+      const compared = compareAttributeValues(
         left.row.properties[sortColumn],
         right.row.properties[sortColumn],
       );

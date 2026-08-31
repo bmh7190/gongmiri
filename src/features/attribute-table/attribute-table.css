@@ -5,7 +5,7 @@
 .react-table__title > span { border-radius: 999px; padding: 5px 9px; color: var(--color-info); background: var(--color-info-soft); font-size: 11px; }
 .react-table__tools { display: grid; gap: 10px; }
 .react-table__tool-row { display: grid; align-items: end; gap: 10px; }
-.react-table__tool-row--primary { grid-template-columns: minmax(210px, 1.6fr) minmax(130px, .9fr) minmax(130px, .9fr) 40px; }
+.react-table__tool-row--primary { grid-template-columns: minmax(210px, 1.6fr) minmax(150px, .7fr); }
 .react-table__tool-row--filters { grid-template-columns: minmax(150px, 1.2fr) minmax(125px, 1fr) minmax(90px, .7fr) minmax(90px, .7fr); }
 .react-table__tools label { display: grid; gap: 5px; min-width: 0; }
 .react-table__tools label > span { color: var(--color-text-muted); font-size: 11px; font-weight: 700; }
@@ -19,12 +19,44 @@
   background: var(--color-surface);
 }
 .react-table__tools button { cursor: pointer; white-space: nowrap; }
-.react-table__sort-direction {
-  width: 40px;
-  padding: 0 !important;
-  font-size: 18px;
-  font-weight: 700;
+.react-table__filters {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-subtle);
 }
+.react-table__filters summary {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.react-table__filters summary::-webkit-details-marker { display: none; }
+.react-table__filters summary::before {
+  color: var(--color-text-muted);
+  content: "›";
+  font-size: 17px;
+  line-height: 1;
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+.react-table__filters[open] summary::before { transform: rotate(90deg); }
+.react-table__filters.is-active summary::after {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  content: "";
+}
+.react-table__filters[open] { padding-bottom: 12px; }
+.react-table__filters[open] summary { margin-bottom: 10px; border-bottom: 1px solid var(--color-border); }
+.react-table__filters .react-table__tool-row { padding: 0 12px; }
 .react-table__viewport {
   position: relative;
   max-height: 440px;
@@ -44,7 +76,7 @@
   border-bottom: 1px solid var(--color-border-strong);
   background: var(--color-surface-subtle);
 }
-.react-table__header span, .react-table__row span {
+.react-table__header > span, .react-table__row > span {
   min-width: 0;
   overflow: hidden;
   border-right: 1px solid var(--color-border);
@@ -54,10 +86,32 @@
   text-align: left;
   font-size: 12px;
 }
-.react-table__header span { color: var(--color-text); font-weight: 700; }
+.react-table__header > span { color: var(--color-text); font-weight: 700; }
+.react-table__header > span:not(:first-child) { padding: 0; }
+.react-table__header button {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  overflow: hidden;
+  border: 0;
+  padding: 8px 10px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.react-table__header button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.react-table__header button i { color: var(--color-primary); font-size: 13px; font-style: normal; }
+.react-table__header button:hover { color: var(--color-primary); background: var(--color-primary-soft); }
+.react-table__header button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .react-table__spacer { position: relative; min-width: max-content; }
-.react-table__virtual { position: absolute; top: 0; left: 0; }
 .react-table__row {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: max-content;
   height: 34px;
   border: 0;
@@ -70,7 +124,7 @@
 .react-table__row:hover { background: var(--color-primary-soft); }
 .react-table__row.is-selected { color: var(--color-text); background: var(--color-info-soft); box-shadow: inset 3px 0 var(--color-primary); }
 .react-table__row:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--color-primary); outline-offset: -2px; }
-.react-table__row span:first-child, .react-table__header span:first-child { position: sticky; left: 0; text-align: center; background: inherit; }
+.react-table__row > span:first-child, .react-table__header > span:first-child { position: sticky; left: 0; text-align: center; background: inherit; }
 @media (max-width: 760px) {
   .react-table__tool-row--primary,
   .react-table__tool-row--filters { grid-template-columns: 1fr 1fr; }
