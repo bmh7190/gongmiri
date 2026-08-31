@@ -166,6 +166,7 @@ export default function AttributeTable({
     enableMultiSort: false,
     enableSortingRemoval: true,
     sortDescFirst: false,
+    columnResizeMode: "onChange",
   });
   const rows = table.getRowModel().rows;
   const visibleColumns = table.getVisibleLeafColumns();
@@ -365,12 +366,22 @@ export default function AttributeTable({
                 >
                   <button
                     type="button"
+                    className="react-table__sort-button"
                     title={header.column.id}
                     onClick={header.column.getToggleSortingHandler()}
                   >
                     <span>{header.column.id}</span>
                     {sorted && <i aria-hidden="true">{sorted === "asc" ? "↑" : "↓"}</i>}
                   </button>
+                  <button
+                    type="button"
+                    className={`react-table__resizer${header.column.getIsResizing() ? " is-resizing" : ""}`}
+                    aria-label={t("table.resizeColumn", { column: header.column.id })}
+                    title={t("table.resetColumnWidth")}
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    onDoubleClick={() => header.column.resetSize()}
+                  />
                 </span>
               );
             })}

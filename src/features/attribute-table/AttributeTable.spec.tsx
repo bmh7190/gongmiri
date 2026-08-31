@@ -61,6 +61,8 @@ describe("AttributeTable", () => {
     expect(html).toContain('aria-sort="none"');
     expect(html).toContain('title="name"');
     expect(html).toContain('title="score"');
+    expect(html).toContain("Resize name column");
+    expect(html).toContain("Double-click to reset width");
     expect(html).not.toContain("Sort column");
   });
 });
