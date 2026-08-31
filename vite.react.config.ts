@@ -1,18 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { crx } from "@crxjs/vite-plugin";
-import manifest from "./extension/manifest.json";
 
 export default defineConfig({
-  plugins: [
-    react(),
-    crx({ manifest })
-  ],
+  plugins: [react()],
   build: {
+    outDir: "dist-react",
     sourcemap: true,
     rollupOptions: {
       input: {
-        viewer: "extension/viewer.html",
+        viewer: "extension/react-viewer.html",
       },
       output: {
         manualChunks: {
@@ -21,5 +17,5 @@ export default defineConfig({
         },
       },
     },
-  }
+  },
 });

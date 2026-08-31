@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "공미리(gongmiri)"
+  },
+  "extensionDescription": {
+    "message": "공간데이터 SHP/ZIP을 브라우저에서 빠르게 미리봅니다."
+  },
+  "openViewer": {
+    "message": "공미리 열기"
+  }
+}

@@ -23,6 +23,7 @@
   },
   "include": [
     "vite.config.ts",
+    "vite.react.config.ts",
     "extension/manifest.json",
     "types/**/*.d.ts"
   ]

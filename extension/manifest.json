@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "공미리(gongmiri)",
-  "version": "0.1.1",
-  "description": "공간데이터(SHP/ZIP) 다운로드 즉시 브라우저에서 미리보기",
+  "name": "__MSG_extensionName__",
+  "version": "0.2.0",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "ko",
 
   "action": {
-    "default_title": "Open gongmiri",
-    "default_popup": "extension/viewer.html"
+    "default_title": "__MSG_openViewer__"
   },
 
   "permissions": ["storage"],
+  "optional_permissions": ["downloads"],
   "host_permissions": ["https://basemaps.cartocdn.com/*"],
 
   "background": {

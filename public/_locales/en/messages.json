@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Gongmiri"
+  },
+  "extensionDescription": {
+    "message": "Quickly preview spatial SHP/ZIP data in your browser."
+  },
+  "openViewer": {
+    "message": "Open Gongmiri"
+  }
+}

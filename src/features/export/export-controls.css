@@ -1,0 +1,36 @@
+.react-export {
+  display: grid;
+  grid-template-columns: 1fr minmax(160px, .6fr) minmax(180px, .7fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--color-surface-subtle);
+}
+.react-export h2 { margin: 0; font-size: 18px; }
+.react-export p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 12px; }
+.react-export label { display: grid; gap: 5px; }
+.react-export label span { color: var(--color-text-muted); font-size: 11px; font-weight: 700; }
+.react-export select, .react-export button {
+  min-height: 40px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  padding: 0 11px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.react-export__actions { display: flex; gap: 7px; }
+.react-export button { cursor: pointer; }
+.react-export__warning { grid-column: 1 / -1; color: var(--color-warning-text) !important; }
+.react-export__error { grid-column: 1 / -1; color: var(--color-danger) !important; }
+.react-export__progress { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-muted); font-size: 12px; }
+.react-export__fields { grid-column: 1 / -1; }
+.react-export__fields summary { cursor: pointer; color: var(--color-text); font-size: 12px; font-weight: 700; }
+.react-export__fields > div { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-top: 9px; }
+.react-export__fields label { display: flex; grid-template-columns: auto 1fr; align-items: center; gap: 6px; }
+@media (max-width: 760px) {
+  .react-export { grid-template-columns: 1fr; }
+  .react-export__actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
