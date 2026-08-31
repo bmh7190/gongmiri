@@ -172,17 +172,14 @@ button, select, input { accent-color: var(--color-primary); }
 .react-result-tabs { display: none; }
 .react-result-panel { min-width: 0; }
 .react-summary__headline {
-  position: sticky;
-  top: 12px;
-  z-index: 4;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+  gap: 18px 32px;
+  margin-bottom: 24px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 12px 14px;
-  background: var(--color-surface-translucent);
+  padding: 18px 24px;
+  background: var(--color-surface);
   box-shadow: 0 8px 24px rgba(30, 41, 59, .08);
-  backdrop-filter: blur(8px);
 }
 .react-summary__headline > div {
   min-width: 140px;
@@ -243,7 +240,7 @@ button, select, input { accent-color: var(--color-primary); }
   .react-header { align-items: flex-start; flex-wrap: wrap; }
   .react-header__actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .react-grid, .react-columns, .react-column-tools { grid-template-columns: 1fr; }
-  .react-summary__headline { position: static; }
+  .react-summary__headline { gap: 14px 20px; padding: 16px 18px; }
   .react-result-tabs {
     position: sticky;
     top: 8px;
