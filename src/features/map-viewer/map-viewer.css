@@ -1,0 +1,17 @@
+.react-map { display: grid; gap: 12px; margin-bottom: 24px; }
+.react-map__header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.react-map__header h2 { margin: 0; font-size: 18px; }
+.react-map__header p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
+.react-map__status { border-radius: 999px; padding: 5px 9px; color: var(--color-text-muted); background: var(--color-surface-subtle); font-size: 11px; }
+.react-map__status.is-ready { color: var(--color-success); background: var(--color-success-soft); }
+.react-map__canvas { position: relative; min-height: 380px; overflow: hidden; border-radius: 14px; background: var(--color-map-placeholder); }
+.react-map__container { position: absolute; inset: 0; }
+.react-map__empty, .react-map__error { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; }
+.react-map__empty { color: var(--color-text-muted); background: var(--color-surface-translucent); }
+.react-map__error { color: var(--color-danger); background: var(--color-danger-soft); }
+@media (max-width: 760px) { .react-map__canvas { min-height: 320px; } }
+.react-map-popup { min-width: 220px; max-width: 320px; }
+.react-map-popup > strong { display: block; margin-bottom: 8px; font-size: 13px; }
+.react-map-popup dl { display: grid; grid-template-columns: minmax(70px, auto) minmax(0, 1fr); max-height: 240px; margin: 0; overflow: auto; font-size: 12px; }
+.react-map-popup dt, .react-map-popup dd { min-width: 0; margin: 0; border-top: 1px solid var(--color-border); padding: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.react-map-popup dt { color: var(--color-text-muted); font-weight: 700; background: var(--color-surface-subtle); }

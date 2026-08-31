@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.react.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["vite/client", "chrome", "react", "react-dom"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": [
+    "src/react/**/*.ts",
+    "src/react/**/*.tsx",
+    "src/features/**/*.ts",
+    "src/features/**/*.tsx",
+    "src/domain/**/*.ts",
+    "src/shared/**/*.ts",
+    "src/workers/**/*.ts",
+    "src/locales/messages.ts",
+    "types/**/*.d.ts"
+  ]
+}
