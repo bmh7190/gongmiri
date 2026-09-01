@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -6,7 +7,8 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type MouseEvent,
+  type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -208,6 +210,18 @@ export default function AttributeTable({
   const [minimum, setMinimum] = useState("");
   const [maximum, setMaximum] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [resizingColumnId, setResizingColumnId] = useState<string | false>(false);
+  const resizeInteractionRef = useRef<{
+    columnId: string;
+    startX: number;
+    startSize: number;
+    nextSize: number;
+    minimumSize: number;
+    maximumSize: number;
+  } | null>(null);
+  const resizeFrameRef = useRef<number | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
 
   const sourceRows = useMemo(
     () =>
@@ -293,7 +307,10 @@ export default function AttributeTable({
     },
   });
   const rows = table.getRowModel().rows;
-  const visibleColumns = table.getVisibleLeafColumns();
+  const headerGroups = table.getHeaderGroups();
+  const visibleColumns = headerGroups[headerGroups.length - 1]?.headers.map(
+    (header) => header.column,
+  ) ?? table.getVisibleLeafColumns();
   const dataColumns = table
     .getAllLeafColumns()
     .filter((column) => column.id !== "__rowNumber");
@@ -310,8 +327,19 @@ export default function AttributeTable({
     if (previousIndex < 0 || nextIndex < 0) return;
     table.setColumnOrder(["__rowNumber", ...arrayMove(order, previousIndex, nextIndex)]);
   };
+  const getColumnWidth = useCallback((column: AttributeColumn) => {
+    const minimumSize = column.columnDef.minSize ?? 20;
+    const maximumSize = column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER;
+    return Math.min(
+      maximumSize,
+      Math.max(
+        minimumSize,
+        columnWidths[column.id] ?? column.columnDef.size ?? 150,
+      ),
+    );
+  }, [columnWidths]);
   const rowTemplate = visibleColumns
-    .map((column) => `${column.getSize()}px`)
+    .map((column) => `${getColumnWidth(column)}px`)
     .join(" ");
   const columnGridStyle = {
     "--react-table-columns": rowTemplate,
@@ -322,9 +350,21 @@ export default function AttributeTable({
   const endPinnedColumns = visibleColumns.filter(
     (column) => column.getIsPinned() === "end",
   );
+  const startPinnedOffsets = new Map<string, number>();
+  let startPinnedOffset = 0;
+  startPinnedColumns.forEach((column) => {
+    startPinnedOffsets.set(column.id, startPinnedOffset);
+    startPinnedOffset += getColumnWidth(column);
+  });
+  const endPinnedOffsets = new Map<string, number>();
+  let endPinnedOffset = 0;
+  [...endPinnedColumns].reverse().forEach((column) => {
+    endPinnedOffsets.set(column.id, endPinnedOffset);
+    endPinnedOffset += getColumnWidth(column);
+  });
   const startPinnedEdgeId = startPinnedColumns[startPinnedColumns.length - 1]?.id;
   const endPinnedEdgeId = endPinnedColumns[0]?.id;
-  const getCellClassName = (column: AttributeColumn) => {
+  const getCellClassName = useCallback((column: AttributeColumn) => {
     const pinned = column.getIsPinned();
     return [
       pinned ? "is-pinned" : "",
@@ -332,18 +372,43 @@ export default function AttributeTable({
       || (pinned === "end" && column.id === endPinnedEdgeId)
         ? "is-pinned-edge"
         : "",
-      column.getIsResizing() ? "is-resizing" : "",
+      column.id === resizingColumnId ? "is-resizing" : "",
     ].filter(Boolean).join(" ") || undefined;
-  };
+  }, [endPinnedEdgeId, resizingColumnId, startPinnedEdgeId]);
+  const pinnedOffsetsKey = [
+    ...startPinnedColumns.map(
+      (column) => `${column.id}:${startPinnedOffsets.get(column.id) ?? 0}`,
+    ),
+    ...endPinnedColumns.map(
+      (column) => `${column.id}:${endPinnedOffsets.get(column.id) ?? 0}`,
+    ),
+  ].join("|");
+  const getPinnedStyle = useCallback((column: AttributeColumn) => {
+    const pinned = column.getIsPinned();
+    if (pinned === "start") {
+      return { left: `${startPinnedOffsets.get(column.id) ?? 0}px` };
+    }
+    if (pinned === "end") {
+      return { right: `${endPinnedOffsets.get(column.id) ?? 0}px` };
+    }
+    return undefined;
+  }, [pinnedOffsetsKey]);
   const pageCount = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
   const pageStart = pageIndex * ROWS_PER_PAGE;
-  const pageRows = rows.slice(pageStart, pageStart + ROWS_PER_PAGE);
+  const pageRows = useMemo(
+    () => rows.slice(pageStart, pageStart + ROWS_PER_PAGE),
+    [pageStart, rows],
+  );
 
   useEffect(() => {
     if (pageIndex < pageCount) return;
     setPageIndex(pageCount - 1);
     viewportRef.current?.scrollTo({ top: 0 });
   }, [pageCount, pageIndex]);
+
+  useEffect(() => {
+    setColumnWidths({});
+  }, [collection]);
 
   useEffect(() => {
     onFilteredIdsChange?.(filteredFeatureIds);
@@ -391,14 +456,20 @@ export default function AttributeTable({
     return () => viewport.removeEventListener("wheel", containBoundaryWheel);
   }, []);
 
+  useEffect(() => () => {
+    if (resizeFrameRef.current !== null) {
+      cancelAnimationFrame(resizeFrameRef.current);
+    }
+    resizeCleanupRef.current?.();
+  }, []);
+
   const showPage = (nextPage: number) => {
     setPageIndex(nextPage);
     viewportRef.current?.scrollTo({ top: 0 });
   };
 
   const handleSort = (
-    event: MouseEvent<HTMLButtonElement>,
-    toggleSorting: ((event: unknown) => void) | undefined,
+    event: ReactMouseEvent<HTMLButtonElement>,
   ) => {
     const viewport = viewportRef.current;
     const appScroller = viewport?.closest<HTMLElement>(".react-app") ?? null;
@@ -411,10 +482,155 @@ export default function AttributeTable({
         appScroller,
       };
     }
-    toggleSorting?.(event);
+    const columnId = event.currentTarget
+      .closest<HTMLElement>("[data-column-id]")
+      ?.dataset.columnId;
+    if (columnId) {
+      table.getColumn(columnId)?.getToggleSortingHandler()?.(event);
+    }
   };
 
-  const handleRowKeyDown = (
+  const commitPendingColumnSize = () => {
+    resizeFrameRef.current = null;
+    const interaction = resizeInteractionRef.current;
+    if (!interaction) return;
+    setColumnWidths((current) => ({
+      ...current,
+      [interaction.columnId]: interaction.nextSize,
+    }));
+  };
+
+  const updateColumnSize = (clientX: number, immediate = false) => {
+    const interaction = resizeInteractionRef.current;
+    if (!interaction) return;
+    interaction.nextSize = Math.min(
+      interaction.maximumSize,
+      Math.max(
+        interaction.minimumSize,
+        interaction.startSize + clientX - interaction.startX,
+      ),
+    );
+    if (immediate) {
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+      }
+      commitPendingColumnSize();
+      return;
+    }
+    if (resizeFrameRef.current === null) {
+      resizeFrameRef.current = requestAnimationFrame(commitPendingColumnSize);
+    }
+  };
+
+  const startColumnResize = (
+    clientX: number,
+    columnId: string,
+    startSize: number,
+    minimumSize: number,
+    maximumSize: number,
+  ) => {
+    resizeCleanupRef.current?.();
+    resizeInteractionRef.current = {
+      columnId,
+      startX: clientX,
+      startSize,
+      nextSize: startSize,
+      minimumSize,
+      maximumSize,
+    };
+    setResizingColumnId(columnId);
+  };
+
+  const finishColumnResize = (clientX?: number) => {
+    if (!resizeInteractionRef.current) return;
+    if (typeof clientX === "number") updateColumnSize(clientX, true);
+    else commitPendingColumnSize();
+    resizeInteractionRef.current = null;
+    resizeCleanupRef.current?.();
+    resizeCleanupRef.current = null;
+    setResizingColumnId(false);
+  };
+
+  const resetColumnSize = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const columnId = event.currentTarget.dataset.columnId;
+    if (!columnId) return;
+    setColumnWidths((current) => {
+      if (!(columnId in current)) return current;
+      const next = { ...current };
+      delete next[columnId];
+      return next;
+    });
+  };
+
+  const beginMouseColumnResize = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) => {
+    const columnId = event.currentTarget.dataset.columnId;
+    const headerCell = event.currentTarget.closest<HTMLElement>("[role=columnheader]");
+    if (!columnId || !headerCell) return;
+    event.preventDefault();
+    startColumnResize(
+      event.clientX,
+      columnId,
+      headerCell.getBoundingClientRect().width,
+      Number(event.currentTarget.dataset.minSize ?? 80),
+      Number(event.currentTarget.dataset.maxSize ?? Number.MAX_SAFE_INTEGER),
+    );
+    const ownerDocument = event.currentTarget.ownerDocument;
+    const onMove = (moveEvent: globalThis.MouseEvent) => {
+      updateColumnSize(moveEvent.clientX);
+    };
+    const onEnd = (endEvent: globalThis.MouseEvent) => {
+      finishColumnResize(endEvent.clientX);
+    };
+    const onBlur = () => finishColumnResize();
+    const cleanup = () => {
+      ownerDocument.removeEventListener("mousemove", onMove);
+      ownerDocument.removeEventListener("mouseup", onEnd);
+      ownerDocument.defaultView?.removeEventListener("blur", onBlur);
+    };
+    resizeCleanupRef.current = cleanup;
+    ownerDocument.addEventListener("mousemove", onMove);
+    ownerDocument.addEventListener("mouseup", onEnd);
+    ownerDocument.defaultView?.addEventListener("blur", onBlur);
+  };
+
+  const beginTouchColumnResize = (
+    event: ReactTouchEvent<HTMLButtonElement>,
+  ) => {
+    const columnId = event.currentTarget.dataset.columnId;
+    const headerCell = event.currentTarget.closest<HTMLElement>("[role=columnheader]");
+    if (!columnId || !headerCell || event.touches.length !== 1) return;
+    event.preventDefault();
+    startColumnResize(
+      event.touches[0].clientX,
+      columnId,
+      headerCell.getBoundingClientRect().width,
+      Number(event.currentTarget.dataset.minSize ?? 80),
+      Number(event.currentTarget.dataset.maxSize ?? Number.MAX_SAFE_INTEGER),
+    );
+    const ownerDocument = event.currentTarget.ownerDocument;
+    const onMove = (moveEvent: globalThis.TouchEvent) => {
+      if (moveEvent.cancelable) moveEvent.preventDefault();
+      const touch = moveEvent.touches[0];
+      if (touch) updateColumnSize(touch.clientX);
+    };
+    const onEnd = (endEvent: globalThis.TouchEvent) => {
+      finishColumnResize(endEvent.changedTouches[0]?.clientX);
+    };
+    const onCancel = () => finishColumnResize();
+    const cleanup = () => {
+      ownerDocument.removeEventListener("touchmove", onMove);
+      ownerDocument.removeEventListener("touchend", onEnd);
+      ownerDocument.removeEventListener("touchcancel", onCancel);
+    };
+    resizeCleanupRef.current = cleanup;
+    ownerDocument.addEventListener("touchmove", onMove, { passive: false });
+    ownerDocument.addEventListener("touchend", onEnd);
+    ownerDocument.addEventListener("touchcancel", onCancel);
+  };
+
+  const handleRowKeyDown = useCallback((
     event: KeyboardEvent<HTMLButtonElement>,
     index: number,
   ) => {
@@ -429,7 +645,64 @@ export default function AttributeTable({
       showPage(Math.floor(nextIndex / ROWS_PER_PAGE));
       onSelect(next.original.id);
     }
-  };
+  }, [onSelect, rows]);
+
+  const renderedPageRows = useMemo(() => pageRows.map((row, pageRowIndex) => {
+    const absoluteIndex = pageStart + pageRowIndex;
+    const selected = row.original.id === selectedId;
+    return (
+      <button
+        key={row.id}
+        type="button"
+        role="row"
+        aria-rowindex={absoluteIndex + 1}
+        aria-selected={selected}
+        className={`react-table__row${selected ? " is-selected" : ""}`}
+        onClick={() => onSelect(row.original.id)}
+        onKeyDown={(event) => handleRowKeyDown(event, absoluteIndex)}
+      >
+        {row.getVisibleCells().map((cell) => {
+          const pinnedStyle = getPinnedStyle(cell.column);
+          if (cell.column.id === "__rowNumber") {
+            return (
+              <span
+                key={cell.id}
+                role="gridcell"
+                data-column-id={cell.column.id}
+                className={getCellClassName(cell.column)}
+                style={pinnedStyle}
+              >
+                {absoluteIndex + 1}
+              </span>
+            );
+          }
+          const value = formatCell(cell.getValue());
+          return (
+            <span
+              key={cell.id}
+              role="gridcell"
+              title={value}
+              data-column-id={cell.column.id}
+              className={getCellClassName(cell.column)}
+              style={pinnedStyle}
+            >
+              <table.FlexRender cell={cell} />
+            </span>
+          );
+        })}
+      </button>
+    );
+  }), [
+    getCellClassName,
+    getPinnedStyle,
+    handleRowKeyDown,
+    onSelect,
+    pageRows,
+    pageStart,
+    pinnedOffsetsKey,
+    selectedId,
+    table.FlexRender,
+  ]);
 
   return (
     <section className="react-table" aria-labelledby="attribute-table-title">
@@ -550,13 +823,13 @@ export default function AttributeTable({
 
       <div
         ref={viewportRef}
-        className="react-table__viewport"
+        className={`react-table__viewport${resizingColumnId ? " is-resizing" : ""}`}
         role="grid"
         aria-rowcount={rows.length}
         aria-colcount={visibleColumns.length}
         style={columnGridStyle}
       >
-        {table.getHeaderGroups().map((headerGroup) => (
+        {headerGroups.map((headerGroup) => (
           <div
             key={headerGroup.id}
             className="react-table__header"
@@ -564,16 +837,11 @@ export default function AttributeTable({
           >
             {headerGroup.headers.map((header) => {
               const sorted = header.column.getIsSorted();
-              const pinned = header.column.getIsPinned();
-              const pinnedStyle = pinned === "start"
-                ? { left: `${header.column.getStart("start")}px` }
-                : pinned === "end"
-                  ? { right: `${header.column.getAfter("end")}px` }
-                  : undefined;
+              const pinnedStyle = getPinnedStyle(header.column);
               if (header.column.id === "__rowNumber") {
                 return (
                   <span
-                    key={header.id}
+                    key={header.column.id}
                     role="columnheader"
                     aria-label={t("table.rowNumber")}
                     data-column-id={header.column.id}
@@ -584,7 +852,7 @@ export default function AttributeTable({
               }
               return (
                 <span
-                  key={header.id}
+                  key={header.column.id}
                   role="columnheader"
                   aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
                   data-column-id={header.column.id}
@@ -595,10 +863,7 @@ export default function AttributeTable({
                     type="button"
                     className="react-table__sort-button"
                     title={header.column.id}
-                    onClick={(event) => handleSort(
-                      event,
-                      header.column.getToggleSortingHandler(),
-                    )}
+                    onClick={handleSort}
                   >
                     <span>{header.column.id}</span>
                     {sorted && <i aria-hidden="true">{sorted === "asc" ? "↑" : "↓"}</i>}
@@ -609,9 +874,12 @@ export default function AttributeTable({
                     aria-label={t("table.resizeColumn", { column: header.column.id })}
                     aria-orientation="vertical"
                     title={t("table.resetColumnWidth")}
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    onDoubleClick={() => header.column.resetSize()}
+                    data-column-id={header.column.id}
+                    data-min-size={header.column.columnDef.minSize ?? 80}
+                    data-max-size={header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}
+                    onMouseDown={beginMouseColumnResize}
+                    onTouchStart={beginTouchColumnResize}
+                    onDoubleClick={resetColumnSize}
                   />
                 </span>
               );
@@ -619,57 +887,7 @@ export default function AttributeTable({
           </div>
         ))}
         <div className="react-table__body">
-          {pageRows.map((row, pageRowIndex) => {
-              const absoluteIndex = pageStart + pageRowIndex;
-              const selected = row.original.id === selectedId;
-              return (
-                <button
-                  key={row.id}
-                  type="button"
-                  role="row"
-                  aria-rowindex={absoluteIndex + 1}
-                  aria-selected={selected}
-                  className={`react-table__row${selected ? " is-selected" : ""}`}
-                  onClick={() => onSelect(row.original.id)}
-                  onKeyDown={(event) => handleRowKeyDown(event, absoluteIndex)}
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    const pinned = cell.column.getIsPinned();
-                    const pinnedStyle = pinned === "start"
-                      ? { left: `${cell.column.getStart("start")}px` }
-                      : pinned === "end"
-                        ? { right: `${cell.column.getAfter("end")}px` }
-                        : undefined;
-                    if (cell.column.id === "__rowNumber") {
-                      return (
-                        <span
-                          key={cell.id}
-                          role="gridcell"
-                          data-column-id={cell.column.id}
-                          className={getCellClassName(cell.column)}
-                          style={pinnedStyle}
-                        >
-                          {absoluteIndex + 1}
-                        </span>
-                      );
-                    }
-                    const value = formatCell(cell.getValue());
-                    return (
-                      <span
-                        key={cell.id}
-                        role="gridcell"
-                        title={value}
-                        data-column-id={cell.column.id}
-                        className={getCellClassName(cell.column)}
-                        style={pinnedStyle}
-                      >
-                        <table.FlexRender cell={cell} />
-                      </span>
-                    );
-                  })}
-                </button>
-              );
-            })}
+          {renderedPageRows}
         </div>
       </div>
       <nav className="react-table__pagination" aria-label={t("table.pagination")}>
