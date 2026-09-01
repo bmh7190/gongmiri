@@ -157,6 +157,11 @@
   background: var(--color-surface);
   scrollbar-gutter: stable;
 }
+.react-table__viewport.is-resizing,
+.react-table__viewport.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
 .react-table__header, .react-table__row {
   display: grid;
   min-width: max-content;

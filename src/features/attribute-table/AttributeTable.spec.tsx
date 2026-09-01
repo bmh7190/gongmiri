@@ -84,7 +84,8 @@ describe("AttributeTable", () => {
     expect(html).toContain("Page 1 of 1");
     expect(html).toContain('disabled=""');
     expect(html).toContain('--react-table-columns:54px 108px 108px');
-    expect(html.match(/data-column-id="name"/g)).toHaveLength(2);
+    expect(html.match(/data-column-id="name"/g)).toHaveLength(3);
+    expect(html).toContain('data-min-size="80"');
   });
 
   it("renders a bounded native row page instead of a virtualized body", async () => {
