@@ -212,7 +212,7 @@ button, select, input { accent-color: var(--color-primary); }
   background: transparent;
   box-shadow: none;
 }
-.react-summary { display: grid; gap: 20px; }
+.react-summary { width: 100%; min-width: 0; max-width: 100%; display: grid; gap: 20px; }
 .react-progress > div, .react-columns article > div {
   display: flex;
   justify-content: space-between;
@@ -235,7 +235,9 @@ button, select, input { accent-color: var(--color-primary); }
 .react-map-loading { min-height: 380px; display: grid; place-items: center; margin-bottom: 24px; border-radius: var(--radius-lg); color: var(--color-text-muted); background: var(--color-map-placeholder); }
 .react-result-tabs { display: none; }
 .react-result-panel {
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   padding: 24px;
