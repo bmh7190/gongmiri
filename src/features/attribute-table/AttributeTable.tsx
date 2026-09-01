@@ -74,6 +74,33 @@ export const shouldContainTableWheel = ({
   return (deltaY < 0 && atTop) || (deltaY > 0 && atBottom);
 };
 
+type ScrollTarget = {
+  scrollTop: number;
+  scrollLeft: number;
+};
+
+export type TableScrollPosition = {
+  viewportTop: number;
+  viewportLeft: number;
+  appTop: number;
+  appLeft: number;
+};
+
+export const restoreTableScrollPosition = (
+  position: TableScrollPosition,
+  viewport: ScrollTarget | null,
+  appScroller: ScrollTarget | null,
+) => {
+  if (viewport) {
+    viewport.scrollTop = position.viewportTop;
+    viewport.scrollLeft = position.viewportLeft;
+  }
+  if (appScroller) {
+    appScroller.scrollTop = position.appTop;
+    appScroller.scrollLeft = position.appLeft;
+  }
+};
+
 const TABLE_FEATURES = tableFeatures({
   columnOrderingFeature,
   columnPinningFeature,
@@ -203,11 +230,13 @@ export default function AttributeTable({
   const { t, i18n } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const pendingSortScrollRef = useRef<{
-    viewportTop: number;
-    viewportLeft: number;
-    appTop: number;
-    appLeft: number;
+    position: TableScrollPosition;
     appScroller: HTMLElement | null;
+  } | null>(null);
+  const resizeScrollRef = useRef<{
+    position: TableScrollPosition;
+    appScroller: HTMLElement | null;
+    releaseAfterCommit: boolean;
   } | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
@@ -227,6 +256,7 @@ export default function AttributeTable({
     maximumSize: number;
   } | null>(null);
   const resizeFrameRef = useRef<number | null>(null);
+  const resizeReleaseFrameRef = useRef<number | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
 
   const sourceRows = useMemo(
@@ -434,20 +464,41 @@ export default function AttributeTable({
     pendingSortScrollRef.current = null;
 
     const restoreScroll = () => {
-      const viewport = viewportRef.current;
-      if (viewport) {
-        viewport.scrollTop = pending.viewportTop;
-        viewport.scrollLeft = pending.viewportLeft;
-      }
-      if (pending.appScroller) {
-        pending.appScroller.scrollTop = pending.appTop;
-        pending.appScroller.scrollLeft = pending.appLeft;
-      }
+      restoreTableScrollPosition(
+        pending.position,
+        viewportRef.current,
+        pending.appScroller,
+      );
     };
 
     restoreScroll();
     const frame = requestAnimationFrame(restoreScroll);
     return () => cancelAnimationFrame(frame);
+  });
+
+  useLayoutEffect(() => {
+    const pending = resizeScrollRef.current;
+    if (!pending) return;
+
+    const restoreScroll = () => {
+      restoreTableScrollPosition(
+        pending.position,
+        viewportRef.current,
+        pending.appScroller,
+      );
+    };
+
+    restoreScroll();
+    if (!pending.releaseAfterCommit) return;
+
+    if (resizeReleaseFrameRef.current !== null) {
+      cancelAnimationFrame(resizeReleaseFrameRef.current);
+    }
+    resizeReleaseFrameRef.current = requestAnimationFrame(() => {
+      restoreScroll();
+      if (resizeScrollRef.current === pending) resizeScrollRef.current = null;
+      resizeReleaseFrameRef.current = null;
+    });
   });
 
   useEffect(() => {
@@ -474,6 +525,9 @@ export default function AttributeTable({
     if (resizeFrameRef.current !== null) {
       cancelAnimationFrame(resizeFrameRef.current);
     }
+    if (resizeReleaseFrameRef.current !== null) {
+      cancelAnimationFrame(resizeReleaseFrameRef.current);
+    }
     resizeCleanupRef.current?.();
   }, []);
 
@@ -489,10 +543,12 @@ export default function AttributeTable({
     const appScroller = viewport?.closest<HTMLElement>(".react-app") ?? null;
     if (viewport) {
       pendingSortScrollRef.current = {
-        viewportTop: viewport.scrollTop,
-        viewportLeft: viewport.scrollLeft,
-        appTop: appScroller?.scrollTop ?? 0,
-        appLeft: appScroller?.scrollLeft ?? 0,
+        position: {
+          viewportTop: viewport.scrollTop,
+          viewportLeft: viewport.scrollLeft,
+          appTop: appScroller?.scrollTop ?? 0,
+          appLeft: appScroller?.scrollLeft ?? 0,
+        },
         appScroller,
       };
     }
@@ -544,6 +600,22 @@ export default function AttributeTable({
     maximumSize: number,
   ) => {
     resizeCleanupRef.current?.();
+    if (resizeReleaseFrameRef.current !== null) {
+      cancelAnimationFrame(resizeReleaseFrameRef.current);
+      resizeReleaseFrameRef.current = null;
+    }
+    const viewport = viewportRef.current;
+    const appScroller = viewport?.closest<HTMLElement>(".react-app") ?? null;
+    resizeScrollRef.current = viewport ? {
+      position: {
+        viewportTop: viewport.scrollTop,
+        viewportLeft: viewport.scrollLeft,
+        appTop: appScroller?.scrollTop ?? 0,
+        appLeft: appScroller?.scrollLeft ?? 0,
+      },
+      appScroller,
+      releaseAfterCommit: false,
+    } : null;
     resizeInteractionRef.current = {
       columnId,
       startX: clientX,
@@ -562,6 +634,9 @@ export default function AttributeTable({
     resizeInteractionRef.current = null;
     resizeCleanupRef.current?.();
     resizeCleanupRef.current = null;
+    if (resizeScrollRef.current) {
+      resizeScrollRef.current.releaseAfterCommit = true;
+    }
     setResizingColumnId(false);
   };
 
