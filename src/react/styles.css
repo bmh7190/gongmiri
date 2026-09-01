@@ -75,6 +75,8 @@ button, select, input { accent-color: var(--color-primary); }
   padding: 20px;
   overflow-x: hidden;
   overflow-y: auto;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
   container-name: viewer;
   container-type: inline-size;
 }
