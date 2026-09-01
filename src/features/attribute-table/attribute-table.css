@@ -4,17 +4,32 @@
 .react-table__title p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
 .react-table__title-actions { position: relative; display: flex; align-items: center; gap: 8px; }
 .react-table__export-button {
-  min-height: 28px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 5px 11px;
+  padding: 0;
   color: var(--color-text);
   background: var(--color-surface);
-  font-size: 11px;
-  font-weight: 700;
   cursor: pointer;
 }
+.react-table__export-button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .react-table__export-button:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.react-table__export-button[aria-expanded="true"] {
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: var(--color-primary-soft);

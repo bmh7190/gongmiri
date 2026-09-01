@@ -159,6 +159,7 @@ export default function ExportDialog({
 
   return (
     <dialog
+      id="export-dialog"
       ref={dialogRef}
       className="react-export-dialog"
       aria-labelledby="export-dialog-title"

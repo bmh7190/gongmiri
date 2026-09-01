@@ -67,7 +67,10 @@ describe("AttributeTable", () => {
 
     expect(html).toContain("Detailed filters");
     expect(html).toContain("Columns 2/2");
-    expect(html).toContain("Export");
+    expect(html).toContain('aria-label="Export"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="export-dialog"');
+    expect(html).toContain("<svg");
     expect(html).toContain("Column visibility");
     expect(html).toContain("Show all");
     expect(html).toContain('type="checkbox" checked=""');
