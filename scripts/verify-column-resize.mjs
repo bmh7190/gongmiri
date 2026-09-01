@@ -13,6 +13,7 @@ const projectDir = path.resolve(scriptDir, "..");
 const distDir = path.join(projectDir, "dist");
 const temporaryDir = await mkdtemp(path.join(tmpdir(), "gongmiri-column-resize-"));
 const fixturePath = path.join(temporaryDir, "column-resize-fixture.zip");
+const useActionPopup = process.argv.includes("--popup");
 
 const delay = (milliseconds) => new Promise((resolve) => {
   setTimeout(resolve, milliseconds);
@@ -62,6 +63,7 @@ const createResizeFixture = async () => {
     ["name", `Feature ${String(index + 1).padStart(3, "0")}`],
     ["group", `Group ${index % 8}`],
     ["score", index * 3],
+    ["long_text", `${index}-${"W".repeat(320 + index * 3)}`],
     ...Array.from({ length: 9 }, (_, columnIndex) => [
       `column_${String(columnIndex + 1).padStart(2, "0")}`,
       `Value ${index}-${columnIndex}`,
@@ -269,6 +271,42 @@ try {
     "Viewer page load",
   );
 
+  if (useActionPopup) {
+    const existingTargetId = pageTarget.id;
+    const openPopupResult = await cdp.evaluate(`chrome.action.openPopup()
+      .then(() => ({ ok: true }))
+      .catch((error) => ({ ok: false, message: error?.message ?? String(error) }))`);
+    assert.equal(
+      openPopupResult.ok,
+      true,
+      `Chrome action popup could not be opened: ${openPopupResult.message ?? "unknown error"}`,
+    );
+    let popupTarget;
+    await waitFor(
+      async () => {
+        const targetsResponse = await fetch(`http://127.0.0.1:${debuggerPort}/json/list`);
+        const targets = await targetsResponse.json();
+        popupTarget = targets.find(({ id, type, url }) => (
+          id !== existingTargetId && type === "page" && url === viewerUrl
+        ));
+        return Boolean(popupTarget?.webSocketDebuggerUrl);
+      },
+      "Extension action popup target",
+    );
+    cdp = await connectCdp(popupTarget.webSocketDebuggerUrl);
+    await cdp.send("Runtime.enable");
+    await cdp.send("DOM.enable");
+    await cdp.send("Page.enable");
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+    await waitFor(
+      () => cdp.evaluate(
+        `document.readyState === 'complete'
+          && Boolean(document.querySelector('input[type="file"]'))`,
+      ),
+      "Action popup page load",
+    );
+  }
+
   const documentResult = await cdp.send("DOM.getDocument", { depth: 1 });
   const inputResult = await cdp.send("DOM.querySelector", {
     nodeId: documentResult.root.nodeId,
@@ -338,6 +376,13 @@ try {
       cellX: cellRect.x + cellRect.width / 2,
       cellY: cellRect.y + cellRect.height / 2,
       width: header.getBoundingClientRect().width,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      visualWidth: window.visualViewport?.width ?? window.innerWidth,
+      visualHeight: window.visualViewport?.height ?? window.innerHeight,
+      rootWidth: document.documentElement.scrollWidth,
+      rootHeight: document.documentElement.scrollHeight,
+      rootTop: document.scrollingElement?.scrollTop ?? 0,
       appTop: app.scrollTop,
       appHeight: app.scrollHeight,
       viewportTop: viewport.scrollTop,
@@ -358,6 +403,13 @@ try {
     const handle = [...document.querySelectorAll('.rdg-resize-handle')][${initial.handleIndex}];
     return {
       width: handle.closest('[role="columnheader"]').getBoundingClientRect().width,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      visualWidth: window.visualViewport?.width ?? window.innerWidth,
+      visualHeight: window.visualViewport?.height ?? window.innerHeight,
+      rootWidth: document.documentElement.scrollWidth,
+      rootHeight: document.documentElement.scrollHeight,
+      rootTop: document.scrollingElement?.scrollTop ?? 0,
       appTop: app.scrollTop,
       appHeight: app.scrollHeight,
       viewportTop: viewport.scrollTop,
@@ -365,8 +417,18 @@ try {
       activeRole: document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName,
     };
   })()`);
-  const assertScrollPosition = (actual, stage) => {
+  const assertPopupGeometry = (actual, stage) => {
+    assert.equal(actual.innerWidth, initial.innerWidth, `${stage}: popup width changed.`);
+    assert.equal(actual.innerHeight, initial.innerHeight, `${stage}: popup height changed.`);
+    assert.equal(actual.visualWidth, initial.visualWidth, `${stage}: visual viewport width changed.`);
+    assert.equal(actual.visualHeight, initial.visualHeight, `${stage}: visual viewport height changed.`);
+    assert.equal(actual.rootWidth, initial.rootWidth, `${stage}: root layout width changed.`);
+    assert.equal(actual.rootHeight, initial.rootHeight, `${stage}: root layout height changed.`);
+    assert.equal(actual.rootTop, initial.rootTop, `${stage}: root document scroll moved.`);
     assert.equal(actual.appHeight, initial.appHeight, `${stage}: outer layout height changed.`);
+  };
+  const assertScrollPosition = (actual, stage) => {
+    assertPopupGeometry(actual, stage);
     assert.equal(actual.appTop, initial.appTop, `${stage}: outer scroll moved.`);
     assert.equal(actual.viewportTop, initial.viewportTop, `${stage}: vertical table scroll moved.`);
     assert.equal(actual.viewportLeft, initial.viewportLeft, `${stage}: horizontal table scroll moved.`);
@@ -379,6 +441,7 @@ try {
     trackpadStates.push({ stage: `wheel-${index + 1}`, ...(await readState()) });
   }
   for (const state of trackpadStates) {
+    assertPopupGeometry(state, state.stage);
     assert.equal(state.appTop, initial.appTop, `${state.stage}: outer scroll moved during table scrolling.`);
   }
   assert.ok(
@@ -395,6 +458,7 @@ try {
   await dispatchWheel(cdp, initial.viewportX, initial.viewportY, 0, -240);
   await delay(50);
   boundaryStates.push({ stage: "top-overscroll", ...(await readState()) });
+  assertPopupGeometry(boundaryStates[0], "top-overscroll");
   assert.equal(boundaryStates[0].appTop, initial.appTop, "Top overscroll moved the outer viewer.");
   assert.equal(boundaryStates[0].viewportTop, 0, "Top overscroll moved the grid past its boundary.");
   await cdp.evaluate(`(() => {
@@ -407,6 +471,7 @@ try {
   await dispatchWheel(cdp, initial.viewportX, initial.viewportY, 0, 240);
   await delay(50);
   boundaryStates.push({ stage: "bottom-overscroll", ...(await readState()) });
+  assertPopupGeometry(boundaryStates[1], "bottom-overscroll");
   assert.equal(boundaryStates[1].appTop, initial.appTop, "Bottom overscroll moved the outer viewer.");
   assert.equal(
     boundaryStates[1].viewportTop,
@@ -505,6 +570,10 @@ try {
     environment: {
       extensionId,
       protocol: new URL(viewerUrl).protocol,
+      surface: useActionPopup ? "action-popup" : "extension-tab",
+      viewType: await cdp.evaluate(`chrome.extension.getViews({ type: "popup" }).includes(window)
+        ? "popup"
+        : "tab"`),
     },
     initial,
     trackpadStates,

@@ -1,4 +1,12 @@
-.react-table { display: grid; gap: 14px; overflow-anchor: none; }
+.react-table {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: grid;
+  gap: 14px;
+  overflow-anchor: none;
+  contain: inline-size;
+}
 .react-table__title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .react-table__title h2 { margin: 0; font-size: 18px; }
 .react-table__title p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
@@ -186,6 +194,10 @@
   --rdg-row-selected-background-color: var(--color-info-soft);
   --rdg-row-selected-hover-background-color: var(--color-info-soft);
   height: 440px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  contain: inline-size layout paint style;
   content-visibility: visible;
   overflow-anchor: none;
   overscroll-behavior: contain;

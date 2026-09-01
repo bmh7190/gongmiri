@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -74,133 +73,6 @@ const createManagedColumnState = (
   pinnedStart: [],
   pinnedEnd: [],
 });
-
-const getWheelPixels = (event: WheelEvent, grid: HTMLDivElement) => {
-  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-    ? 34
-    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-      ? grid.clientHeight
-      : 1;
-  let left = event.deltaX * unit;
-  let top = event.deltaY * unit;
-  if (event.shiftKey && left === 0) {
-    left = top;
-    top = 0;
-  }
-  return { left, top };
-};
-
-const useIsolatedGridScroll = () => {
-  const gridRef = useRef<DataGridHandle>(null);
-
-  useLayoutEffect(() => {
-    const grid = gridRef.current?.element;
-    const outer = grid?.closest<HTMLElement>(".react-app");
-    if (!grid || !outer) return;
-
-    let interactionLocked = false;
-    let restoring = false;
-    let releaseToken = 0;
-    let lockedPosition = {
-      outerTop: outer.scrollTop,
-      outerLeft: outer.scrollLeft,
-      gridTop: grid.scrollTop,
-      gridLeft: grid.scrollLeft,
-    };
-
-    const rememberPosition = () => {
-      lockedPosition = {
-        outerTop: outer.scrollTop,
-        outerLeft: outer.scrollLeft,
-        gridTop: grid.scrollTop,
-        gridLeft: grid.scrollLeft,
-      };
-    };
-    const restoreOuter = () => {
-      if (restoring) return;
-      restoring = true;
-      outer.scrollTop = lockedPosition.outerTop;
-      outer.scrollLeft = lockedPosition.outerLeft;
-      restoring = false;
-    };
-    const restoreInteraction = () => {
-      if (restoring) return;
-      restoring = true;
-      outer.scrollTop = lockedPosition.outerTop;
-      outer.scrollLeft = lockedPosition.outerLeft;
-      grid.scrollTop = lockedPosition.gridTop;
-      grid.scrollLeft = lockedPosition.gridLeft;
-      restoring = false;
-    };
-    const handleWheel = (event: WheelEvent) => {
-      if (event.ctrlKey) return;
-      // Trackpad momentum can escape a nested scroller at either boundary even
-      // with overscroll-behavior. Consume it here and move only the grid.
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const { left, top } = getWheelPixels(event, grid);
-      const outerTop = outer.scrollTop;
-      const outerLeft = outer.scrollLeft;
-      grid.scrollTop += top;
-      grid.scrollLeft += left;
-      outer.scrollTop = outerTop;
-      outer.scrollLeft = outerLeft;
-      lockedPosition.outerTop = outerTop;
-      lockedPosition.outerLeft = outerLeft;
-      lockedPosition.gridTop = grid.scrollTop;
-      lockedPosition.gridLeft = grid.scrollLeft;
-    };
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target?.closest("[role='columnheader'], [role='gridcell'], .rdg-resize-handle")) {
-        return;
-      }
-      releaseToken += 1;
-      interactionLocked = true;
-      // React Data Grid focuses/scrolls active cells while resizing or sorting.
-      // Keep both nested scroll containers at their pre-interaction positions.
-      rememberPosition();
-    };
-    const releaseInteraction = () => {
-      if (!interactionLocked) return;
-      const token = ++releaseToken;
-      restoreInteraction();
-      window.requestAnimationFrame(() => {
-        if (token !== releaseToken) return;
-        restoreInteraction();
-        window.requestAnimationFrame(() => {
-          if (token !== releaseToken) return;
-          restoreInteraction();
-          interactionLocked = false;
-        });
-      });
-    };
-    const handleGridScroll = () => {
-      if (interactionLocked) restoreInteraction();
-    };
-    const handleOuterScroll = () => {
-      if (interactionLocked) restoreOuter();
-    };
-
-    grid.addEventListener("wheel", handleWheel, { capture: true, passive: false });
-    grid.addEventListener("pointerdown", handlePointerDown, true);
-    grid.addEventListener("scroll", handleGridScroll);
-    outer.addEventListener("scroll", handleOuterScroll);
-    window.addEventListener("pointerup", releaseInteraction, true);
-    window.addEventListener("pointercancel", releaseInteraction, true);
-    return () => {
-      releaseToken += 1;
-      grid.removeEventListener("wheel", handleWheel, true);
-      grid.removeEventListener("pointerdown", handlePointerDown, true);
-      grid.removeEventListener("scroll", handleGridScroll);
-      outer.removeEventListener("scroll", handleOuterScroll);
-      window.removeEventListener("pointerup", releaseInteraction, true);
-      window.removeEventListener("pointercancel", releaseInteraction, true);
-    };
-  }, []);
-
-  return gridRef;
-};
 
 type SortableColumnOptionProps = {
   columnId: string;
@@ -324,7 +196,7 @@ export default function AttributeTable({
   exportOpen = false,
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
-  const gridRef = useIsolatedGridScroll();
+  const gridRef = useRef<DataGridHandle>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
