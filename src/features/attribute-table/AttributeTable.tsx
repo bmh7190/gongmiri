@@ -8,7 +8,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -233,10 +233,9 @@ export default function AttributeTable({
     position: TableScrollPosition;
     appScroller: HTMLElement | null;
   } | null>(null);
-  const resizeScrollRef = useRef<{
+  const pendingResizeScrollRef = useRef<{
     position: TableScrollPosition;
     appScroller: HTMLElement | null;
-    releaseAfterCommit: boolean;
   } | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
@@ -245,21 +244,6 @@ export default function AttributeTable({
   const [minimum, setMinimum] = useState("");
   const [maximum, setMaximum] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-  const resizeInteractionRef = useRef<{
-    columnId: string;
-    startX: number;
-    startSize: number;
-    nextSize: number;
-    minimumSize: number;
-    maximumSize: number;
-  } | null>(null);
-  const resizeFrameRef = useRef<number | null>(null);
-  const resizeReleaseFrameRef = useRef<number | null>(null);
-  const resizePointerRef = useRef<{
-    pointerId: number;
-    target: HTMLSpanElement;
-  } | null>(null);
 
   const sourceRows = useMemo(
     () =>
@@ -331,19 +315,28 @@ export default function AttributeTable({
       )),
     ]);
   }, [columnOrder, sourceRows, t]);
-  const table = useTable({
-    features: TABLE_FEATURES,
-    columns: tableColumns,
-    data: filteredRows,
-    getRowId: (row) => row.id,
-    enableMultiSort: false,
-    enableSortingRemoval: true,
-    sortDescFirst: false,
-    columnResizeMode: "onChange",
-    initialState: {
-      columnPinning: { start: ["__rowNumber"], end: [] },
+  const table = useTable(
+    {
+      features: TABLE_FEATURES,
+      columns: tableColumns,
+      data: filteredRows,
+      getRowId: (row) => row.id,
+      enableMultiSort: false,
+      enableSortingRemoval: true,
+      sortDescFirst: false,
+      columnResizeMode: "onEnd",
+      initialState: {
+        columnPinning: { start: ["__rowNumber"], end: [] },
+      },
     },
-  });
+    (state) => ({
+      columnOrder: state.columnOrder,
+      columnPinning: state.columnPinning,
+      columnSizing: state.columnSizing,
+      columnVisibility: state.columnVisibility,
+      sorting: state.sorting,
+    }),
+  );
   const rows = table.getRowModel().rows;
   const headerGroups = table.getHeaderGroups();
   const visibleColumns = headerGroups[headerGroups.length - 1]?.headers.map(
@@ -370,16 +363,8 @@ export default function AttributeTable({
     table.setColumnOrder(["__rowNumber", ...arrayMove(order, previousIndex, nextIndex)]);
   };
   const getColumnWidth = useCallback((column: AttributeColumn) => {
-    const minimumSize = column.columnDef.minSize ?? 20;
-    const maximumSize = column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER;
-    return Math.min(
-      maximumSize,
-      Math.max(
-        minimumSize,
-        columnWidths[column.id] ?? column.columnDef.size ?? 150,
-      ),
-    );
-  }, [columnWidths]);
+    return column.getSize();
+  }, []);
   const rowTemplate = visibleColumns
     .map((column) => `${getColumnWidth(column)}px`)
     .join(" ");
@@ -448,7 +433,7 @@ export default function AttributeTable({
   }, [pageCount, pageIndex]);
 
   useEffect(() => {
-    setColumnWidths({});
+    table.resetColumnSizing(true);
   }, [collection]);
 
   useEffect(() => {
@@ -478,8 +463,9 @@ export default function AttributeTable({
   });
 
   useLayoutEffect(() => {
-    const pending = resizeScrollRef.current;
+    const pending = pendingResizeScrollRef.current;
     if (!pending) return;
+    pendingResizeScrollRef.current = null;
 
     const restoreScroll = () => {
       restoreTableScrollPosition(
@@ -490,16 +476,8 @@ export default function AttributeTable({
     };
 
     restoreScroll();
-    if (!pending.releaseAfterCommit) return;
-
-    if (resizeReleaseFrameRef.current !== null) {
-      cancelAnimationFrame(resizeReleaseFrameRef.current);
-    }
-    resizeReleaseFrameRef.current = requestAnimationFrame(() => {
-      restoreScroll();
-      if (resizeScrollRef.current === pending) resizeScrollRef.current = null;
-      resizeReleaseFrameRef.current = null;
-    });
+    const frame = requestAnimationFrame(restoreScroll);
+    return () => cancelAnimationFrame(frame);
   });
 
   useEffect(() => {
@@ -520,20 +498,6 @@ export default function AttributeTable({
 
     viewport.addEventListener("wheel", containBoundaryWheel, { passive: false });
     return () => viewport.removeEventListener("wheel", containBoundaryWheel);
-  }, []);
-
-  useEffect(() => () => {
-    if (resizeFrameRef.current !== null) {
-      cancelAnimationFrame(resizeFrameRef.current);
-    }
-    if (resizeReleaseFrameRef.current !== null) {
-      cancelAnimationFrame(resizeReleaseFrameRef.current);
-    }
-    const pointer = resizePointerRef.current;
-    if (pointer?.target.hasPointerCapture(pointer.pointerId)) {
-      pointer.target.releasePointerCapture(pointer.pointerId);
-    }
-    viewportRef.current?.removeAttribute("data-resizing");
   }, []);
 
   const showPage = (nextPage: number) => {
@@ -565,60 +529,10 @@ export default function AttributeTable({
     }
   };
 
-  const commitPendingColumnSize = () => {
-    resizeFrameRef.current = null;
-    const interaction = resizeInteractionRef.current;
-    if (!interaction) return;
-    setColumnWidths((current) => {
-      const currentSize = current[interaction.columnId];
-      if (
-        currentSize === interaction.nextSize
-        || (currentSize === undefined
-          && Math.abs(interaction.nextSize - interaction.startSize) < 0.5)
-      ) return current;
-      return {
-        ...current,
-        [interaction.columnId]: interaction.nextSize,
-      };
-    });
-  };
-
-  const updateColumnSize = (clientX: number, immediate = false) => {
-    const interaction = resizeInteractionRef.current;
-    if (!interaction) return;
-    interaction.nextSize = Math.min(
-      interaction.maximumSize,
-      Math.max(
-        interaction.minimumSize,
-        interaction.startSize + clientX - interaction.startX,
-      ),
-    );
-    if (immediate) {
-      if (resizeFrameRef.current !== null) {
-        cancelAnimationFrame(resizeFrameRef.current);
-      }
-      commitPendingColumnSize();
-      return;
-    }
-    if (resizeFrameRef.current === null) {
-      resizeFrameRef.current = requestAnimationFrame(commitPendingColumnSize);
-    }
-  };
-
-  const startColumnResize = (
-    clientX: number,
-    columnId: string,
-    startSize: number,
-    minimumSize: number,
-    maximumSize: number,
-  ) => {
-    if (resizeReleaseFrameRef.current !== null) {
-      cancelAnimationFrame(resizeReleaseFrameRef.current);
-      resizeReleaseFrameRef.current = null;
-    }
+  const captureResizeScroll = () => {
     const viewport = viewportRef.current;
     const appScroller = viewport?.closest<HTMLElement>(".react-app") ?? null;
-    resizeScrollRef.current = viewport ? {
+    pendingResizeScrollRef.current = viewport ? {
       position: {
         viewportTop: viewport.scrollTop,
         viewportLeft: viewport.scrollLeft,
@@ -626,130 +540,37 @@ export default function AttributeTable({
         appLeft: appScroller?.scrollLeft ?? 0,
       },
       appScroller,
-      releaseAfterCommit: false,
     } : null;
-    resizeInteractionRef.current = {
-      columnId,
-      startX: clientX,
-      startSize,
-      nextSize: startSize,
-      minimumSize,
-      maximumSize,
-    };
-    viewport?.setAttribute("data-resizing", columnId);
   };
 
-  const finishColumnResize = (clientX?: number) => {
-    if (!resizeInteractionRef.current) return;
-    if (typeof clientX === "number") updateColumnSize(clientX, true);
-    else commitPendingColumnSize();
-    resizeInteractionRef.current = null;
-    viewportRef.current?.removeAttribute("data-resizing");
-
-    const pointer = resizePointerRef.current;
-    resizePointerRef.current = null;
-    if (pointer?.target.hasPointerCapture(pointer.pointerId)) {
-      pointer.target.releasePointerCapture(pointer.pointerId);
-    }
-
-    const pending = resizeScrollRef.current;
-    if (!pending) return;
-    pending.releaseAfterCommit = true;
-    const restoreScroll = () => restoreTableScrollPosition(
-      pending.position,
-      viewportRef.current,
-      pending.appScroller,
-    );
-    restoreScroll();
-    if (resizeReleaseFrameRef.current !== null) {
-      cancelAnimationFrame(resizeReleaseFrameRef.current);
-    }
-    resizeReleaseFrameRef.current = requestAnimationFrame(() => {
-      restoreScroll();
-      if (resizeScrollRef.current === pending) resizeScrollRef.current = null;
-      resizeReleaseFrameRef.current = null;
-    });
-  };
-
-  const resetColumnSize = (event: ReactMouseEvent<HTMLSpanElement>) => {
+  const beginLibraryColumnResize = (
+    event: ReactMouseEvent<HTMLSpanElement> | ReactTouchEvent<HTMLSpanElement>,
+    resizeHandler: (event: unknown) => void,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
-    const columnId = event.currentTarget.dataset.columnId;
-    if (!columnId) return;
-    setColumnWidths((current) => {
-      if (!(columnId in current)) return current;
-      const next = { ...current };
-      delete next[columnId];
-      return next;
-    });
-  };
-
-  const beginPointerColumnResize = (
-    event: ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    const columnId = event.currentTarget.dataset.columnId;
-    const headerCell = event.currentTarget.closest<HTMLElement>("[role=columnheader]");
-    if (!columnId || !headerCell) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    resizePointerRef.current = {
-      pointerId: event.pointerId,
-      target: event.currentTarget,
-    };
-    startColumnResize(
-      event.clientX,
-      columnId,
-      headerCell.getBoundingClientRect().width,
-      Number(event.currentTarget.dataset.minSize ?? 80),
-      Number(event.currentTarget.dataset.maxSize ?? Number.MAX_SAFE_INTEGER),
-    );
-  };
-
-  const movePointerColumnResize = (
-    event: ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    if (resizePointerRef.current?.pointerId !== event.pointerId) return;
-    if (event.cancelable) event.preventDefault();
-    updateColumnSize(event.clientX);
-  };
-
-  const endPointerColumnResize = (
-    event: ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    if (resizePointerRef.current?.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    finishColumnResize(event.clientX);
-  };
-
-  const cancelPointerColumnResize = (
-    event: ReactPointerEvent<HTMLSpanElement>,
-  ) => {
-    if (resizePointerRef.current?.pointerId !== event.pointerId) return;
-    finishColumnResize();
+    captureResizeScroll();
+    resizeHandler(event);
   };
 
   const handleResizeKeyDown = (
     event: KeyboardEvent<HTMLSpanElement>,
+    column: AttributeColumn,
   ) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    const columnId = event.currentTarget.dataset.columnId;
-    const headerCell = event.currentTarget.closest<HTMLElement>("[role=columnheader]");
-    if (!columnId || !headerCell) return;
     event.preventDefault();
     event.stopPropagation();
-    const startSize = headerCell.getBoundingClientRect().width;
-    startColumnResize(
-      0,
-      columnId,
-      startSize,
-      Number(event.currentTarget.dataset.minSize ?? 80),
-      Number(event.currentTarget.dataset.maxSize ?? Number.MAX_SAFE_INTEGER),
+    captureResizeScroll();
+    const minimumSize = column.columnDef.minSize ?? 20;
+    const maximumSize = column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER;
+    const nextSize = Math.min(
+      maximumSize,
+      Math.max(minimumSize, column.getSize() + (event.key === "ArrowRight" ? 16 : -16)),
     );
-    updateColumnSize(event.key === "ArrowRight" ? 16 : -16, true);
-    finishColumnResize();
+    table.setColumnSizing((current) => ({
+      ...current,
+      [column.id]: nextSize,
+    }));
   };
 
   const handleRowKeyDown = useCallback((
@@ -1005,26 +826,44 @@ export default function AttributeTable({
                     <span>{header.column.id}</span>
                     {sorted && <i aria-hidden="true">{sorted === "asc" ? "↑" : "↓"}</i>}
                   </button>
-                  <span
-                    role="separator"
-                    tabIndex={0}
-                    className="react-table__resizer"
-                    aria-label={t("table.resizeColumn", { column: header.column.id })}
-                    aria-orientation="vertical"
-                    aria-valuemin={header.column.columnDef.minSize ?? 80}
-                    aria-valuemax={header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}
-                    aria-valuenow={Math.round(getColumnWidth(header.column))}
-                    title={t("table.resetColumnWidth")}
-                    data-column-id={header.column.id}
-                    data-min-size={header.column.columnDef.minSize ?? 80}
-                    data-max-size={header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}
-                    onPointerDown={beginPointerColumnResize}
-                    onPointerMove={movePointerColumnResize}
-                    onPointerUp={endPointerColumnResize}
-                    onPointerCancel={cancelPointerColumnResize}
-                    onKeyDown={handleResizeKeyDown}
-                    onDoubleClick={resetColumnSize}
-                  />
+                  <table.Subscribe
+                    selector={(state) => ({
+                      isResizing: state.columnResizing.isResizingColumn === header.column.id,
+                      deltaOffset: state.columnResizing.deltaOffset ?? 0,
+                    })}
+                  >
+                    {({ isResizing, deltaOffset }) => (
+                      <span
+                        role="separator"
+                        tabIndex={0}
+                        className="react-table__resizer"
+                        aria-label={t("table.resizeColumn", { column: header.column.id })}
+                        aria-orientation="vertical"
+                        aria-valuemin={header.column.columnDef.minSize ?? 80}
+                        aria-valuemax={header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}
+                        aria-valuenow={Math.round(getColumnWidth(header.column))}
+                        title={t("table.resetColumnWidth")}
+                        data-column-id={header.column.id}
+                        data-resizing={isResizing ? "true" : undefined}
+                        style={isResizing ? { transform: `translateX(${deltaOffset}px)` } : undefined}
+                        onMouseDown={(event) => beginLibraryColumnResize(
+                          event,
+                          header.getResizeHandler(event.currentTarget.ownerDocument),
+                        )}
+                        onTouchStart={(event) => beginLibraryColumnResize(
+                          event,
+                          header.getResizeHandler(event.currentTarget.ownerDocument),
+                        )}
+                        onKeyDown={(event) => handleResizeKeyDown(event, header.column)}
+                        onDoubleClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          captureResizeScroll();
+                          header.column.resetSize();
+                        }}
+                      />
+                    )}
+                  </table.Subscribe>
                 </span>
               );
             })}

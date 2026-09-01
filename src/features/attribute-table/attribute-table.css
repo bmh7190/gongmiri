@@ -188,11 +188,6 @@
   background: var(--color-surface);
   scrollbar-gutter: stable;
 }
-.react-table__viewport[data-resizing],
-.react-table__viewport[data-resizing] * {
-  cursor: col-resize !important;
-  user-select: none;
-}
 .react-table__header, .react-table__row {
   display: grid;
   min-width: max-content;
@@ -263,7 +258,7 @@
   content: "";
 }
 .react-table__resizer:hover::after,
-.react-table__resizer:active::after { width: 2px; background: var(--color-primary); }
+.react-table__resizer[data-resizing="true"]::after { width: 2px; background: var(--color-primary); }
 .react-table__resizer:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .react-table__body { min-width: max-content; overflow-anchor: none; }
 .react-table__row {
