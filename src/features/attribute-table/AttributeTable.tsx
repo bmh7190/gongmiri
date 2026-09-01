@@ -162,6 +162,8 @@ type AttributeTableProps = {
   selectedId: FeatureId | null;
   onSelect: (id: FeatureId) => void;
   onFilteredIdsChange?: (ids: FeatureId[]) => void;
+  onVisibleColumnOrderChange?: (columnIds: string[]) => void;
+  onExport?: (trigger: HTMLButtonElement) => void;
 };
 
 const formatCell = (value: unknown): string => {
@@ -193,6 +195,8 @@ export default function AttributeTable({
   selectedId,
   onSelect,
   onFilteredIdsChange,
+  onVisibleColumnOrderChange,
+  onExport,
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -315,6 +319,10 @@ export default function AttributeTable({
     .getAllLeafColumns()
     .filter((column) => column.id !== "__rowNumber");
   const visibleDataColumnCount = dataColumns.filter((column) => column.getIsVisible()).length;
+  const visibleDataColumnIds = visibleColumns
+    .filter((column) => column.id !== "__rowNumber")
+    .map((column) => column.id);
+  const visibleDataColumnOrderKey = visibleDataColumnIds.join("\u0000");
   const dragSensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -413,6 +421,10 @@ export default function AttributeTable({
   useEffect(() => {
     onFilteredIdsChange?.(filteredFeatureIds);
   }, [filteredFeatureIds, onFilteredIdsChange]);
+
+  useEffect(() => {
+    onVisibleColumnOrderChange?.(visibleDataColumnIds);
+  }, [onVisibleColumnOrderChange, visibleDataColumnOrderKey]);
 
   useLayoutEffect(() => {
     const pending = pendingSortScrollRef.current;
@@ -718,6 +730,15 @@ export default function AttributeTable({
           </p>
         </div>
         <div className="react-table__title-actions">
+          {onExport && (
+            <button
+              type="button"
+              className="react-table__export-button"
+              onClick={(event) => onExport(event.currentTarget)}
+            >
+              {t("export.open")}
+            </button>
+          )}
           <details className="react-table__column-manager">
             <summary>
               {t("table.columns")} {visibleDataColumnCount}/{dataColumns.length}
