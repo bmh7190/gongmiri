@@ -4,7 +4,10 @@ import { I18nextProvider } from "react-i18next";
 import { renderToStaticMarkup } from "react-dom/server";
 import { messages } from "../../locales/messages";
 import type { ColumnStat, FeatureCollectionGeometry } from "../../domain/types";
-import AttributeTable, { shouldContainTableWheel } from "./AttributeTable";
+import AttributeTable, {
+  restoreTableScrollPosition,
+  shouldContainTableWheel,
+} from "./AttributeTable";
 
 const collection: FeatureCollectionGeometry = {
   type: "FeatureCollection",
@@ -41,6 +44,25 @@ describe("AttributeTable", () => {
     expect(shouldContainTableWheel({ ...viewport, scrollTop: 2_960, deltaY: 120 })).toBe(true);
     expect(shouldContainTableWheel({ ...viewport, scrollTop: 2_960, deltaY: -120 })).toBe(false);
     expect(shouldContainTableWheel({ ...viewport, scrollTop: 0, deltaY: 0 })).toBe(false);
+  });
+
+  it("restores both table and outer scroll positions after a column resize render", () => {
+    const viewport = { scrollTop: 0, scrollLeft: 0 };
+    const appScroller = { scrollTop: 0, scrollLeft: 0 };
+
+    restoreTableScrollPosition(
+      {
+        viewportTop: 1_200,
+        viewportLeft: 340,
+        appTop: 1_940,
+        appLeft: 0,
+      },
+      viewport,
+      appScroller,
+    );
+
+    expect(viewport).toEqual({ scrollTop: 1_200, scrollLeft: 340 });
+    expect(appScroller).toEqual({ scrollTop: 1_940, scrollLeft: 0 });
   });
 
   it("renders sortable column headers and keeps detailed filters collapsed", async () => {
