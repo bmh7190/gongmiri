@@ -69,7 +69,7 @@ const createResizeFixture = async () => {
   ]);
   const collection = {
     type: "FeatureCollection",
-    features: Array.from({ length: 300 }, (_, index) => ({
+    features: Array.from({ length: 44 }, (_, index) => ({
       type: "Feature",
       geometry: {
         type: "Point",
@@ -198,6 +198,18 @@ const dispatchMouse = (cdp, type, x, y, buttons, clickCount = 0) => cdp.send(
   },
 );
 
+const dispatchWheel = (cdp, x, y, deltaX, deltaY) => cdp.send(
+  "Input.dispatchMouseEvent",
+  {
+    type: "mouseWheel",
+    x,
+    y,
+    deltaX,
+    deltaY,
+    pointerType: "mouse",
+  },
+);
+
 const dispatchTouch = (cdp, type, x, y) => cdp.send("Input.dispatchTouchEvent", {
   type,
   touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1, radiusX: 1, radiusY: 1 }],
@@ -285,7 +297,7 @@ try {
       }));
     }
     app.scrollTop += viewport.getBoundingClientRect().top - 80;
-    viewport.scrollTop = 1200;
+    viewport.scrollTop = 400;
     viewport.scrollLeft = 275;
     await new Promise(requestAnimationFrame);
     await new Promise(requestAnimationFrame);
@@ -309,6 +321,8 @@ try {
       hitClass: hit?.className ?? null,
       x: rect.x + rect.width / 2,
       y: rect.y + rect.height / 2,
+      viewportX: viewportRect.x + viewportRect.width / 2,
+      viewportY: viewportRect.y + viewportRect.height / 2,
       width: header.getBoundingClientRect().width,
       appTop: app.scrollTop,
       appHeight: app.scrollHeight,
@@ -343,6 +357,55 @@ try {
     assert.equal(actual.viewportTop, initial.viewportTop, `${stage}: vertical table scroll moved.`);
     assert.equal(actual.viewportLeft, initial.viewportLeft, `${stage}: horizontal table scroll moved.`);
   };
+
+  const trackpadStates = [];
+  for (let index = 0; index < 12; index += 1) {
+    await dispatchWheel(cdp, initial.viewportX, initial.viewportY, 0, 24);
+    await delay(16);
+    trackpadStates.push({ stage: `wheel-${index + 1}`, ...(await readState()) });
+  }
+  for (const state of trackpadStates) {
+    assert.equal(state.appTop, initial.appTop, `${state.stage}: outer scroll moved during table scrolling.`);
+  }
+  assert.ok(
+    trackpadStates.at(-1).viewportTop > initial.viewportTop,
+    "Trackpad-like wheel input did not scroll the data grid.",
+  );
+  const boundaryStates = [];
+  await cdp.evaluate(`(() => {
+    const app = document.querySelector('.react-app') || document.scrollingElement;
+    const viewport = document.querySelector('.react-table__grid');
+    app.scrollTop = ${initial.appTop};
+    viewport.scrollTop = 0;
+  })()`);
+  await dispatchWheel(cdp, initial.viewportX, initial.viewportY, 0, -240);
+  await delay(50);
+  boundaryStates.push({ stage: "top-overscroll", ...(await readState()) });
+  assert.equal(boundaryStates[0].appTop, initial.appTop, "Top overscroll moved the outer viewer.");
+  assert.equal(boundaryStates[0].viewportTop, 0, "Top overscroll moved the grid past its boundary.");
+  await cdp.evaluate(`(() => {
+    const app = document.querySelector('.react-app') || document.scrollingElement;
+    const viewport = document.querySelector('.react-table__grid');
+    app.scrollTop = ${initial.appTop};
+    viewport.scrollTop = viewport.scrollHeight;
+  })()`);
+  const bottomBefore = await readState();
+  await dispatchWheel(cdp, initial.viewportX, initial.viewportY, 0, 240);
+  await delay(50);
+  boundaryStates.push({ stage: "bottom-overscroll", ...(await readState()) });
+  assert.equal(boundaryStates[1].appTop, initial.appTop, "Bottom overscroll moved the outer viewer.");
+  assert.equal(
+    boundaryStates[1].viewportTop,
+    bottomBefore.viewportTop,
+    "Bottom overscroll moved the grid past its boundary.",
+  );
+  await cdp.evaluate(`(async () => {
+    const app = document.querySelector('.react-app') || document.scrollingElement;
+    const viewport = document.querySelector('.react-table__grid');
+    app.scrollTop = ${initial.appTop};
+    viewport.scrollTop = ${initial.viewportTop};
+    await new Promise(requestAnimationFrame);
+  })()`);
 
   await dispatchMouse(cdp, "mouseMoved", initial.x, initial.y, 0);
   const hovered = await readState();
@@ -381,6 +444,8 @@ try {
       protocol: new URL(viewerUrl).protocol,
     },
     initial,
+    trackpadStates,
+    boundaryStates,
     hovered,
     clicked,
     resized,
