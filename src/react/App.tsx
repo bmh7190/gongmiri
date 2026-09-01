@@ -22,7 +22,7 @@ import AttributeTable from "../features/attribute-table/AttributeTable";
 import DatasetControls from "../features/dataset-controls/DatasetControls";
 import DatasetSummary from "../features/dataset-summary/DatasetSummary";
 import VisualizationControls from "../features/visualization/VisualizationControls";
-import ExportControls from "../features/export/ExportControls";
+import ExportDialog from "../features/export/ExportDialog";
 import {
   DownloadDetectionPrompt,
   DownloadDetectionToggle,
@@ -86,6 +86,9 @@ export default function App() {
   const [columnSort, setColumnSort] = useState<ColumnSort>("name");
   const [activeResultPanel, setActiveResultPanel] = useState<ResultPanel>("map");
   const [filteredFeatureIds, setFilteredFeatureIds] = useState<FeatureId[]>([]);
+  const [visibleTableFields, setVisibleTableFields] = useState<string[]>([]);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mapCollection = useMemo(
     () => collection
       ? selectExportCollection(collection, filteredFeatureIds)
@@ -156,6 +159,25 @@ export default function App() {
     inspection || result || progress || error || requiresSrid || isLoading,
   );
   const showDropZone = !hasActivity || Boolean(error);
+
+  const handleVisibleTableFields = useCallback((nextFields: string[]) => {
+    setVisibleTableFields((current) => (
+      current.length === nextFields.length
+      && current.every((field, index) => field === nextFields[index])
+        ? current
+        : nextFields
+    ));
+  }, []);
+
+  const handleOpenExport = useCallback((trigger: HTMLButtonElement) => {
+    exportTriggerRef.current = trigger;
+    setIsExportOpen(true);
+  }, []);
+
+  const handleCloseExport = useCallback(() => {
+    setIsExportOpen(false);
+    window.requestAnimationFrame(() => exportTriggerRef.current?.focus());
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -245,6 +267,8 @@ export default function App() {
       setColumnSort("name");
       setActiveResultPanel("map");
       setFilteredFeatureIds([]);
+      setVisibleTableFields([]);
+      setIsExportOpen(false);
       setVisualizationSettings(createDefaultVisualization());
       sourceRef.current = null;
 
@@ -663,15 +687,8 @@ export default function App() {
                       selectedId={selectedId}
                       onSelect={setSelectedId}
                       onFilteredIdsChange={setFilteredFeatureIds}
-                    />
-                    <ExportControls
-                      collection={collection}
-                      selectedId={selectedId}
-                      filteredIds={filteredFeatureIds}
-                      fileName={result.fileName}
-                      parseMode={parseMode}
-                      sourceProjection={sourceProjection}
-                      sourceProjectionLabel={sourceProjectionLabel}
+                      onVisibleColumnOrderChange={handleVisibleTableFields}
+                      onExport={handleOpenExport}
                     />
                   </>
                 )}
@@ -689,6 +706,19 @@ export default function App() {
           )}
         </div>
       </section>
+      {isExportOpen && collection && result && (
+        <ExportDialog
+          collection={collection}
+          selectedId={selectedId}
+          filteredIds={filteredFeatureIds}
+          fileName={result.fileName}
+          parseMode={parseMode}
+          sourceProjection={sourceProjection}
+          sourceProjectionLabel={sourceProjectionLabel}
+          defaultFields={visibleTableFields}
+          onClose={handleCloseExport}
+        />
+      )}
     </main>
   );
 }

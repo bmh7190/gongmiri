@@ -1,0 +1,170 @@
+.react-export-dialog {
+  width: min(560px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100% - 32px);
+  margin: auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 18px;
+  padding: 0;
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+}
+.react-export-dialog::backdrop { background: rgba(15, 23, 42, .58); backdrop-filter: blur(3px); }
+.react-export-dialog__shell { display: flex; max-height: calc(100vh - 32px); flex-direction: column; }
+.react-export-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--color-border);
+  padding: 18px 20px 15px;
+}
+.react-export-dialog__header h2 { margin: 0; font-size: 20px; }
+.react-export-dialog__header p { margin: 4px 0 0; color: var(--color-text-muted); font-size: 12px; }
+.react-export-dialog__close {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.react-export-dialog__close:hover { border-color: var(--color-border); color: var(--color-text); background: var(--color-surface-subtle); }
+.react-export-dialog__body { display: grid; gap: 14px; overflow-x: hidden; overflow-y: auto; padding: 18px 20px; }
+.react-export-dialog__format {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  padding: 4px;
+  background: var(--color-surface-subtle);
+}
+.react-export-dialog__format button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+.react-export-dialog__format button[aria-pressed="true"] {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  box-shadow: 0 2px 7px rgba(37, 99, 235, .2);
+}
+.react-export-dialog__description { margin: -5px 2px 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.5; }
+.react-export-dialog__setting { display: grid; gap: 6px; }
+.react-export-dialog__setting > span,
+.react-export-dialog__footer span { color: var(--color-text-muted); font-size: 11px; font-weight: 700; }
+.react-export-dialog__setting select,
+.react-export-dialog__fields > input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  padding: 0 11px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.react-export-dialog__format-note {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: var(--color-surface-subtle);
+}
+.react-export-dialog__format-note strong { font-size: 12px; }
+.react-export-dialog__format-note span { color: var(--color-text-muted); font-size: 11px; }
+.react-export-dialog__fields {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 14px;
+}
+.react-export-dialog__fields-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.react-export-dialog__fields-header > div:first-child { display: grid; gap: 2px; }
+.react-export-dialog__fields-header strong { font-size: 13px; }
+.react-export-dialog__fields-header span { color: var(--color-text-muted); font-size: 11px; }
+.react-export-dialog__fields-header > div:last-child { display: flex; gap: 8px; }
+.react-export-dialog__fields-header button {
+  border: 0;
+  padding: 3px 0;
+  color: var(--color-primary);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.react-export-dialog__field-list {
+  display: grid;
+  max-height: 142px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.react-export-dialog__field-list label {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.react-export-dialog__field-list label:hover { background: var(--color-primary-soft); }
+.react-export-dialog__field-list input { width: 15px; height: 15px; flex: 0 0 auto; }
+.react-export-dialog__field-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.react-export-dialog__field-list p { grid-column: 1 / -1; margin: 8px 0; color: var(--color-text-muted); font-size: 12px; text-align: center; }
+.react-export-dialog__warning,
+.react-export-dialog__error { margin: 0; border-radius: 9px; padding: 9px 11px; font-size: 11px; line-height: 1.45; }
+.react-export-dialog__warning { color: var(--color-warning-text); background: var(--color-warning-soft); }
+.react-export-dialog__error { color: var(--color-danger); background: var(--color-danger-soft); }
+.react-export-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--color-border);
+  padding: 14px 20px;
+  background: var(--color-surface-subtle);
+}
+.react-export-dialog__footer > div:first-child { display: grid; min-width: 0; gap: 2px; }
+.react-export-dialog__footer strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.react-export-dialog__footer > div:last-child { display: flex; flex: 0 0 auto; gap: 8px; }
+.react-export-dialog__footer button {
+  min-height: 38px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  padding: 0 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.react-export-dialog__footer button.is-primary { border-color: var(--color-primary); color: var(--color-on-primary); background: var(--color-primary); }
+.react-export-dialog__footer button.is-primary:hover { filter: brightness(.96); }
+
+@media (max-width: 520px) {
+  .react-export-dialog { width: calc(100% - 20px); max-height: calc(100% - 20px); }
+  .react-export-dialog__shell { max-height: calc(100vh - 20px); }
+  .react-export-dialog__header, .react-export-dialog__body, .react-export-dialog__footer { padding-inline: 14px; }
+  .react-export-dialog__field-list { grid-template-columns: 1fr; }
+  .react-export-dialog__footer { align-items: stretch; flex-direction: column; }
+  .react-export-dialog__footer > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
+}
