@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -231,8 +232,8 @@ export default function AttributeTable({
     [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, sourceRows],
   );
   const tableColumns = useMemo(() => {
-    const stride = Math.max(1, Math.floor(filteredRows.length / WIDTH_SAMPLE_LIMIT));
-    const sample = filteredRows
+    const stride = Math.max(1, Math.floor(sourceRows.length / WIDTH_SAMPLE_LIMIT));
+    const sample = sourceRows
       .filter((_, index) => index % stride === 0)
       .slice(0, WIDTH_SAMPLE_LIMIT);
     return columnHelper.columns([
@@ -240,6 +241,9 @@ export default function AttributeTable({
         id: "__rowNumber",
         header: "",
         size: 54,
+        minSize: 54,
+        maxSize: 54,
+        enableResizing: false,
         enableSorting: false,
       }),
       ...columnOrder.map((column) => columnHelper.accessor(
@@ -248,6 +252,7 @@ export default function AttributeTable({
           id: column,
           header: column || t("table.unnamed"),
           cell: (cell) => formatCell(cell.getValue()),
+          minSize: 80,
           size: estimateWidth([
             column,
             ...sample.map((row) => row.properties[column]),
@@ -260,7 +265,7 @@ export default function AttributeTable({
         },
       )),
     ]);
-  }, [columnOrder, filteredRows, t]);
+  }, [columnOrder, sourceRows, t]);
   const table = useTable({
     features: TABLE_FEATURES,
     columns: tableColumns,
@@ -295,6 +300,28 @@ export default function AttributeTable({
   const rowTemplate = visibleColumns
     .map((column) => `${column.getSize()}px`)
     .join(" ");
+  const columnGridStyle = {
+    "--react-table-columns": rowTemplate,
+  } as CSSProperties;
+  const startPinnedColumns = visibleColumns.filter(
+    (column) => column.getIsPinned() === "start",
+  );
+  const endPinnedColumns = visibleColumns.filter(
+    (column) => column.getIsPinned() === "end",
+  );
+  const startPinnedEdgeId = startPinnedColumns[startPinnedColumns.length - 1]?.id;
+  const endPinnedEdgeId = endPinnedColumns[0]?.id;
+  const getCellClassName = (column: AttributeColumn) => {
+    const pinned = column.getIsPinned();
+    return [
+      pinned ? "is-pinned" : "",
+      (pinned === "start" && column.id === startPinnedEdgeId)
+      || (pinned === "end" && column.id === endPinnedEdgeId)
+        ? "is-pinned-edge"
+        : "",
+      column.getIsResizing() ? "is-resizing" : "",
+    ].filter(Boolean).join(" ") || undefined;
+  };
   const pageCount = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
   const pageStart = pageIndex * ROWS_PER_PAGE;
   const pageRows = rows.slice(pageStart, pageStart + ROWS_PER_PAGE);
@@ -474,13 +501,13 @@ export default function AttributeTable({
         role="grid"
         aria-rowcount={rows.length}
         aria-colcount={visibleColumns.length}
+        style={columnGridStyle}
       >
         {table.getHeaderGroups().map((headerGroup) => (
           <div
             key={headerGroup.id}
             className="react-table__header"
             role="row"
-            style={{ gridTemplateColumns: rowTemplate }}
           >
             {headerGroup.headers.map((header) => {
               const sorted = header.column.getIsSorted();
@@ -496,7 +523,8 @@ export default function AttributeTable({
                     key={header.id}
                     role="columnheader"
                     aria-label={t("table.rowNumber")}
-                    className="is-pinned"
+                    data-column-id={header.column.id}
+                    className={getCellClassName(header.column)}
                     style={pinnedStyle}
                   />
                 );
@@ -506,7 +534,8 @@ export default function AttributeTable({
                   key={header.id}
                   role="columnheader"
                   aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                  className={pinned ? "is-pinned" : undefined}
+                  data-column-id={header.column.id}
+                  className={getCellClassName(header.column)}
                   style={pinnedStyle}
                 >
                   <button
@@ -522,6 +551,7 @@ export default function AttributeTable({
                     type="button"
                     className={`react-table__resizer${header.column.getIsResizing() ? " is-resizing" : ""}`}
                     aria-label={t("table.resizeColumn", { column: header.column.id })}
+                    aria-orientation="vertical"
                     title={t("table.resetColumnWidth")}
                     onMouseDown={header.getResizeHandler()}
                     onTouchStart={header.getResizeHandler()}
@@ -544,9 +574,6 @@ export default function AttributeTable({
                   aria-rowindex={absoluteIndex + 1}
                   aria-selected={selected}
                   className={`react-table__row${selected ? " is-selected" : ""}`}
-                  style={{
-                    gridTemplateColumns: rowTemplate,
-                  }}
                   onClick={() => onSelect(row.original.id)}
                   onKeyDown={(event) => handleRowKeyDown(event, absoluteIndex)}
                 >
@@ -562,7 +589,8 @@ export default function AttributeTable({
                         <span
                           key={cell.id}
                           role="gridcell"
-                          className="is-pinned"
+                          data-column-id={cell.column.id}
+                          className={getCellClassName(cell.column)}
                           style={pinnedStyle}
                         >
                           {absoluteIndex + 1}
@@ -575,7 +603,8 @@ export default function AttributeTable({
                         key={cell.id}
                         role="gridcell"
                         title={value}
-                        className={pinned ? "is-pinned" : undefined}
+                        data-column-id={cell.column.id}
+                        className={getCellClassName(cell.column)}
                         style={pinnedStyle}
                       >
                         <table.FlexRender cell={cell} />

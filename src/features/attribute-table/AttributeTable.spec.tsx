@@ -74,6 +74,7 @@ describe("AttributeTable", () => {
     expect(html).toContain('title="name"');
     expect(html).toContain('title="score"');
     expect(html).toContain("Resize name column");
+    expect(html).toContain('aria-orientation="vertical"');
     expect(html).toContain("Double-click to reset width");
     expect(html).toContain("Pin name column left");
     expect(html).toContain("Pin score column right");
@@ -82,6 +83,8 @@ describe("AttributeTable", () => {
     expect(html).not.toContain("Sort column");
     expect(html).toContain("Page 1 of 1");
     expect(html).toContain('disabled=""');
+    expect(html).toContain('--react-table-columns:54px 108px 108px');
+    expect(html.match(/data-column-id="name"/g)).toHaveLength(2);
   });
 
   it("renders a bounded native row page instead of a virtualized body", async () => {
