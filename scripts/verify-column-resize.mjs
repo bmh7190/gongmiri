@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -18,21 +18,31 @@ const delay = (milliseconds) => new Promise((resolve) => {
   setTimeout(resolve, milliseconds);
 });
 
-const mimeTypes = new Map([
-  [".css", "text/css; charset=utf-8"],
-  [".html", "text/html; charset=utf-8"],
-  [".js", "text/javascript; charset=utf-8"],
-  [".json", "application/json; charset=utf-8"],
-  [".map", "application/json; charset=utf-8"],
-  [".png", "image/png"],
-]);
+const findPlaywrightChromium = () => {
+  const root = path.join(process.env.LOCALAPPDATA ?? "", "ms-playwright");
+  if (!existsSync(root)) return null;
+  const versions = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("chromium-"))
+    .map((entry) => entry.name)
+    .sort()
+    .reverse();
+  for (const version of versions) {
+    const executable = path.join(root, version, "chrome-win64/chrome.exe");
+    if (existsSync(executable)) return executable;
+  }
+  return null;
+};
 
 const findChromeExecutable = () => {
+  const playwrightChromium = process.platform === "win32" ? findPlaywrightChromium() : null;
   const candidates = process.platform === "win32"
     ? [
+        playwrightChromium,
         path.join(process.env.PROGRAMFILES ?? "", "Google/Chrome/Application/chrome.exe"),
         path.join(process.env["PROGRAMFILES(X86)"] ?? "", "Google/Chrome/Application/chrome.exe"),
         path.join(process.env.LOCALAPPDATA ?? "", "Google/Chrome/Application/chrome.exe"),
+        path.join(process.env["PROGRAMFILES(X86)"] ?? "", "Microsoft/Edge/Application/msedge.exe"),
+        path.join(process.env.PROGRAMFILES ?? "", "Microsoft/Edge/Application/msedge.exe"),
       ]
     : process.platform === "darwin"
       ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
@@ -72,35 +82,15 @@ const createResizeFixture = async () => {
   await writeFile(fixturePath, Buffer.from(zip));
 };
 
-const startStaticServer = async () => {
-  const server = createServer(async (request, response) => {
-    try {
-      const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
-      const pathname = requestUrl.pathname === "/"
-        ? "/extension/viewer.html"
-        : decodeURIComponent(requestUrl.pathname);
-      const filePath = path.resolve(distDir, `.${pathname}`);
-      if (filePath !== distDir && !filePath.startsWith(`${distDir}${path.sep}`)) {
-        response.writeHead(403).end();
-        return;
-      }
-      const body = await readFile(filePath);
-      response.writeHead(200, {
-        "cache-control": "no-store",
-        "content-type": mimeTypes.get(path.extname(filePath)) ?? "application/octet-stream",
-      });
-      response.end(body);
-    } catch {
-      response.writeHead(404).end();
-    }
-  });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Static server did not expose a port.");
-  return { server, port: address.port };
+const getUnpackedExtensionId = (extensionPath) => {
+  const digest = createHash("sha256")
+    .update(Buffer.from(extensionPath, process.platform === "win32" ? "utf16le" : "utf8"))
+    .digest()
+    .subarray(0, 16);
+  return [...digest]
+    .flatMap((byte) => [byte >> 4, byte & 15])
+    .map((value) => String.fromCharCode(97 + value))
+    .join("");
 };
 
 const waitForDebuggerUrl = (chromeProcess) => new Promise((resolve, reject) => {
@@ -190,23 +180,23 @@ const dispatchMouse = (cdp, type, x, y, buttons, clickCount = 0) => cdp.send(
 );
 
 let chromeProcess;
-let staticServer;
+let browserCdp;
 let cdp;
 
 try {
   assert.ok(existsSync(path.join(distDir, "extension/viewer.html")), "Run npm run build first.");
   await createResizeFixture();
-  const serverResult = await startStaticServer();
-  staticServer = serverResult.server;
-  const viewerUrl = `http://127.0.0.1:${serverResult.port}/extension/viewer.html`;
   chromeProcess = spawn(findChromeExecutable(), [
-    "--headless=new",
-    "--disable-gpu",
+    "--use-angle=swiftshader",
+    "--enable-unsafe-swiftshader",
     "--no-first-run",
     "--no-default-browser-check",
     "--remote-allow-origins=*",
     "--remote-debugging-port=0",
     "--window-size=800,600",
+    "--window-position=-32000,-32000",
+    `--disable-extensions-except=${distDir}`,
+    `--load-extension=${distDir}`,
     `--user-data-dir=${path.join(temporaryDir, "chrome-profile")}`,
     "about:blank",
   ], {
@@ -215,13 +205,28 @@ try {
   });
   const browserWebSocketUrl = await waitForDebuggerUrl(chromeProcess);
   const debuggerPort = Number(new URL(browserWebSocketUrl).port);
-  const targetResponse = await fetch(
-    `http://127.0.0.1:${debuggerPort}/json/new?${encodeURIComponent(viewerUrl)}`,
-    { method: "PUT" },
+  browserCdp = await connectCdp(browserWebSocketUrl);
+  await delay(1_000);
+  const { targetInfos } = await browserCdp.send("Target.getTargets");
+  const loadedExtensionTarget = targetInfos.find(({ url }) => (
+    url.startsWith("chrome-extension://") && url.endsWith("/service-worker-loader.js")
+  ));
+  const extensionId = loadedExtensionTarget
+    ? new URL(loadedExtensionTarget.url).hostname
+    : getUnpackedExtensionId(distDir);
+  const viewerUrl = `chrome-extension://${extensionId}/extension/viewer.html`;
+  const { targetId } = await browserCdp.send("Target.createTarget", { url: viewerUrl });
+  let pageTarget;
+  await waitFor(
+    async () => {
+      const targetsResponse = await fetch(`http://127.0.0.1:${debuggerPort}/json/list`);
+      const targets = await targetsResponse.json();
+      pageTarget = targets.find(({ id }) => id === targetId);
+      return Boolean(pageTarget?.webSocketDebuggerUrl);
+    },
+    "Extension viewer target",
   );
-  assert.equal(targetResponse.ok, true, "Chrome page target could not be created.");
-  const target = await targetResponse.json();
-  cdp = await connectCdp(target.webSocketDebuggerUrl);
+  cdp = await connectCdp(pageTarget.webSocketDebuggerUrl);
   await cdp.send("Runtime.enable");
   await cdp.send("DOM.enable");
   await cdp.send("Page.enable");
@@ -245,28 +250,23 @@ try {
     nodeId: inputResult.nodeId,
     files: [fixturePath],
   });
-  await delay(50);
-  const parseStarted = await cdp.evaluate(
-    "Boolean(document.querySelector('.react-progress, .react-summary'))",
-  );
-  if (!parseStarted) {
-    await cdp.evaluate(`(() => {
-      const input = document.querySelector('input[type="file"]');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    })()`);
-  }
   await waitFor(
     () => cdp.evaluate("Boolean(document.querySelector('.react-table__resizer'))"),
     "Attribute table render",
   );
 
+  await cdp.evaluate("document.querySelector('#result-tab-table')?.click()");
+  await delay(400);
   const initial = await cdp.evaluate(`(async () => {
-    const tableTab = document.querySelector('#result-tab-table');
-    tableTab?.click();
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const app = document.querySelector('.react-app');
+    const app = document.querySelector('.react-app') || document.scrollingElement;
     const viewport = document.querySelector('.react-table__viewport');
+    if (!app || !viewport) {
+      throw new Error('Viewer scroll containers were not found: ' + JSON.stringify({
+        href: location.href,
+        bodyClass: document.body.className,
+        mainClasses: [...document.querySelectorAll('main')].map((element) => element.className),
+      }));
+    }
     app.scrollTop += viewport.getBoundingClientRect().top - 80;
     viewport.scrollTop = 1200;
     const handles = [...document.querySelectorAll('.react-table__resizer')];
@@ -300,7 +300,7 @@ try {
   assert.ok(initial.viewportLeft > 0, "Table did not reach a horizontal scroll position.");
 
   const readState = () => cdp.evaluate(`(() => {
-    const app = document.querySelector('.react-app');
+    const app = document.querySelector('.react-app') || document.scrollingElement;
     const viewport = document.querySelector('.react-table__viewport');
     const handle = document.querySelector('.react-table__resizer[data-column-id="${initial.target}"]');
     return {
@@ -309,7 +309,7 @@ try {
       appHeight: app.scrollHeight,
       viewportTop: viewport.scrollTop,
       viewportLeft: viewport.scrollLeft,
-      resizing: viewport.getAttribute('data-resizing'),
+      resizing: handle.dataset.resizing === 'true' ? handle.dataset.columnId : null,
       activeRole: document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName,
     };
   })()`);
@@ -354,19 +354,26 @@ try {
   assert.equal(resized.resizing, null, "Resize session did not finish cleanly.");
   assertScrollPosition(resized, "pointer-captured drag");
 
-  console.log(JSON.stringify({ initial, hovered, clicked, resized }, null, 2));
+  console.log(JSON.stringify({
+    environment: {
+      extensionId,
+      protocol: new URL(viewerUrl).protocol,
+    },
+    initial,
+    hovered,
+    clicked,
+    resized,
+  }, null, 2));
   console.log("Column resize browser regression check passed.");
 } finally {
   cdp?.webSocket?.close();
+  browserCdp?.webSocket?.close();
   if (chromeProcess && chromeProcess.exitCode === null) {
     const chromeExited = new Promise((resolve) => {
       chromeProcess.once("exit", resolve);
     });
     chromeProcess.kill();
     await Promise.race([chromeExited, delay(2_000)]);
-  }
-  if (staticServer) {
-    await new Promise((resolve) => staticServer.close(resolve));
   }
   await rm(temporaryDir, {
     recursive: true,
