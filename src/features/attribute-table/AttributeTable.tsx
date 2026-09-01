@@ -164,6 +164,7 @@ type AttributeTableProps = {
   onFilteredIdsChange?: (ids: FeatureId[]) => void;
   onVisibleColumnOrderChange?: (columnIds: string[]) => void;
   onExport?: (trigger: HTMLButtonElement) => void;
+  exportOpen?: boolean;
 };
 
 const formatCell = (value: unknown): string => {
@@ -197,6 +198,7 @@ export default function AttributeTable({
   onFilteredIdsChange,
   onVisibleColumnOrderChange,
   onExport,
+  exportOpen = false,
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -734,9 +736,15 @@ export default function AttributeTable({
             <button
               type="button"
               className="react-table__export-button"
+              aria-label={t("export.open")}
+              aria-controls="export-dialog"
+              aria-expanded={exportOpen}
+              title={t("export.open")}
               onClick={(event) => onExport(event.currentTarget)}
             >
-              {t("export.open")}
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v10m0 0 4-4m-4 4-4-4M5 15v4h14v-4" />
+              </svg>
             </button>
           )}
           <details className="react-table__column-manager">

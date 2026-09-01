@@ -689,6 +689,7 @@ export default function App() {
                       onFilteredIdsChange={setFilteredFeatureIds}
                       onVisibleColumnOrderChange={handleVisibleTableFields}
                       onExport={handleOpenExport}
+                      exportOpen={isExportOpen}
                     />
                   </>
                 )}
