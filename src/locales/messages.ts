@@ -161,6 +161,7 @@ export const messages = {
     },
     export: {
       title: "결과 저장",
+      open: "내보내기",
       count: "{{count}}개 피처",
       scope: "저장 범위",
       all: "현재 표시 전체",
@@ -378,6 +379,7 @@ export const messages = {
     },
     export: {
       title: "Save results",
+      open: "Export",
       count: "{{count}} features",
       scope: "Export scope",
       all: "All displayed",
