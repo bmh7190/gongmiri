@@ -328,6 +328,17 @@ try {
   const pressed = await readState();
   assert.equal(pressed.resizing, initial.target, "Pointer down did not start the resize session.");
   assertScrollPosition(pressed, "pointer down");
+  await cdp.evaluate(`(() => {
+    const app = document.querySelector('.react-app') || document.scrollingElement;
+    const viewport = document.querySelector('.react-table__viewport');
+    app.scrollTop = 0;
+    app.scrollLeft = 0;
+    viewport.scrollTop = 0;
+    viewport.scrollLeft = 0;
+  })()`);
+  await delay(50);
+  const forcedScroll = await readState();
+  assertScrollPosition(forcedScroll, "forced popup scroll during resize");
   await dispatchMouse(cdp, "mouseReleased", initial.x, initial.y, 0, 1);
   await delay(50);
   const clicked = await readState();
@@ -361,6 +372,7 @@ try {
     },
     initial,
     hovered,
+    forcedScroll,
     clicked,
     resized,
   }, null, 2));

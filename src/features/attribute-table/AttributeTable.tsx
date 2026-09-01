@@ -237,6 +237,7 @@ export default function AttributeTable({
     position: TableScrollPosition;
     appScroller: HTMLElement | null;
   } | null>(null);
+  const resizeScrollLockCleanupRef = useRef<(() => void) | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
@@ -500,6 +501,10 @@ export default function AttributeTable({
     return () => viewport.removeEventListener("wheel", containBoundaryWheel);
   }, []);
 
+  useEffect(() => () => {
+    resizeScrollLockCleanupRef.current?.();
+  }, []);
+
   const showPage = (nextPage: number) => {
     setPageIndex(nextPage);
     viewportRef.current?.scrollTo({ top: 0 });
@@ -541,6 +546,49 @@ export default function AttributeTable({
       },
       appScroller,
     } : null;
+    return pendingResizeScrollRef.current;
+  };
+
+  const lockResizeScrollUntilRelease = (ownerDocument: Document) => {
+    resizeScrollLockCleanupRef.current?.();
+    const pending = pendingResizeScrollRef.current;
+    const viewport = viewportRef.current;
+    if (!pending || !viewport) return;
+
+    let restoring = false;
+    const restoreScroll = () => {
+      if (restoring) return;
+      restoring = true;
+      restoreTableScrollPosition(
+        pending.position,
+        viewportRef.current,
+        pending.appScroller,
+      );
+      restoring = false;
+    };
+    const handleUnexpectedScroll = () => restoreScroll();
+    const cleanup = () => {
+      viewport.removeEventListener("scroll", handleUnexpectedScroll);
+      pending.appScroller?.removeEventListener("scroll", handleUnexpectedScroll);
+      ownerDocument.removeEventListener("mouseup", finish);
+      ownerDocument.removeEventListener("touchend", finish);
+      ownerDocument.removeEventListener("touchcancel", finish);
+      if (resizeScrollLockCleanupRef.current === cleanup) {
+        resizeScrollLockCleanupRef.current = null;
+      }
+    };
+    const finish = () => {
+      restoreScroll();
+      cleanup();
+      requestAnimationFrame(restoreScroll);
+    };
+
+    viewport.addEventListener("scroll", handleUnexpectedScroll, { passive: true });
+    pending.appScroller?.addEventListener("scroll", handleUnexpectedScroll, { passive: true });
+    ownerDocument.addEventListener("mouseup", finish);
+    ownerDocument.addEventListener("touchend", finish);
+    ownerDocument.addEventListener("touchcancel", finish);
+    resizeScrollLockCleanupRef.current = cleanup;
   };
 
   const beginLibraryColumnResize = (
@@ -551,26 +599,7 @@ export default function AttributeTable({
     event.stopPropagation();
     captureResizeScroll();
     resizeHandler(event);
-  };
-
-  const handleResizeKeyDown = (
-    event: KeyboardEvent<HTMLSpanElement>,
-    column: AttributeColumn,
-  ) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    event.stopPropagation();
-    captureResizeScroll();
-    const minimumSize = column.columnDef.minSize ?? 20;
-    const maximumSize = column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER;
-    const nextSize = Math.min(
-      maximumSize,
-      Math.max(minimumSize, column.getSize() + (event.key === "ArrowRight" ? 16 : -16)),
-    );
-    table.setColumnSizing((current) => ({
-      ...current,
-      [column.id]: nextSize,
-    }));
+    lockResizeScrollUntilRelease(event.currentTarget.ownerDocument);
   };
 
   const handleRowKeyDown = useCallback((
@@ -835,7 +864,6 @@ export default function AttributeTable({
                     {({ isResizing, deltaOffset }) => (
                       <span
                         role="separator"
-                        tabIndex={0}
                         className="react-table__resizer"
                         aria-label={t("table.resizeColumn", { column: header.column.id })}
                         aria-orientation="vertical"
@@ -854,7 +882,6 @@ export default function AttributeTable({
                           event,
                           header.getResizeHandler(event.currentTarget.ownerDocument),
                         )}
-                        onKeyDown={(event) => handleResizeKeyDown(event, header.column)}
                         onDoubleClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
