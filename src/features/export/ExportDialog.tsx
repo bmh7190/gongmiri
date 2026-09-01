@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -106,10 +107,20 @@ export default function ExportDialog({
     };
   }, []);
 
-  const requestClose = () => {
+  const requestClose = useCallback(() => {
     if (isExporting) cancelExport();
     onClose();
-  };
+  }, [cancelExport, isExporting, onClose]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      requestClose();
+    };
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
+  }, [requestClose]);
 
   const handleBackdropMouseDown = (event: MouseEvent<HTMLDialogElement>) => {
     if (event.target === event.currentTarget) requestClose();
