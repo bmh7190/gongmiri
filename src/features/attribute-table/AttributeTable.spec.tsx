@@ -101,7 +101,9 @@ describe("AttributeTable", () => {
     expect(html).toContain('title="name"');
     expect(html).toContain('title="score"');
     expect(html).toContain("Resize name column");
+    expect(html).toContain('role="separator"');
     expect(html).toContain('aria-orientation="vertical"');
+    expect(html).toContain('aria-valuenow="108"');
     expect(html).toContain("Double-click to reset width");
     expect(html).toContain("Pin name column left");
     expect(html).toContain("Pin score column right");
