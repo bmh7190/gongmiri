@@ -20,31 +20,45 @@ export default function VisualizationControls({
 }: VisualizationControlsProps) {
   const { t } = useTranslation();
   const numericColumns = columns.filter((column) => column.dataType === "number");
+  const hasNumericColumns = numericColumns.length > 0;
+  const viewModes = ["default", "category", "continuous"] as const;
 
   return (
-    <section className="visualization-controls" aria-labelledby="visualization-title">
-      <div>
-        <h2 id="visualization-title">{t("visualization.title")}</h2>
-        <p>{t("visualization.help")}</p>
-      </div>
-      <div className="visualization-controls__fields">
-        <label>
-          <span>{t("visualization.color")}</span>
-          <select
-            value={settings.colorMode}
-            onChange={(event) =>
-              onChange({
-                colorMode: event.target.value as VisualizationSettings["colorMode"],
-              })
-            }
-          >
-            <option value="default">{t("visualization.default")}</option>
-            <option value="category">{t("visualization.category")}</option>
-            <option value="continuous">{t("visualization.continuous")}</option>
-          </select>
-        </label>
+    <section className="visualization-controls" aria-label={t("visualization.title")}>
+      <details className="visualization-controls__disclosure">
+        <summary>
+          <span>{t("visualization.title")}</span>
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="m5 7.5 5 5 5-5" />
+          </svg>
+        </summary>
+        <div className="visualization-controls__body">
+        <fieldset className="visualization-controls__group visualization-controls__mode-group">
+          <legend>{t("visualization.mode")}</legend>
+          <div className="visualization-controls__modes">
+            {viewModes.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={settings.colorMode === mode ? "is-active" : ""}
+                aria-pressed={settings.colorMode === mode}
+                disabled={mode === "continuous" && !hasNumericColumns}
+                title={mode === "continuous" && !hasNumericColumns
+                  ? t("visualization.requiresNumeric")
+                  : undefined}
+                onClick={() => onChange({ colorMode: mode })}
+              >
+                <span className={`visualization-controls__swatch is-${mode}`} aria-hidden="true">
+                  {mode === "category" && <><i /><i /><i /></>}
+                </span>
+                {t(`visualization.${mode}`)}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
         {settings.colorMode === "category" && (
-          <label>
+          <label className="visualization-controls__field">
             <span>{t("visualization.field")}</span>
             <select
               value={settings.categoryField ?? ""}
@@ -58,8 +72,8 @@ export default function VisualizationControls({
           </label>
         )}
         {settings.colorMode === "continuous" && (
-          <>
-            <label>
+          <div className="visualization-controls__conditional">
+            <label className="visualization-controls__field">
               <span>{t("visualization.numericField")}</span>
               <select
                 value={settings.numericField ?? ""}
@@ -71,7 +85,7 @@ export default function VisualizationControls({
                 ))}
               </select>
             </label>
-            <label>
+            <label className="visualization-controls__field">
               <span>{t("visualization.scale")}</span>
               <select
                 value={settings.numericScale}
@@ -85,33 +99,43 @@ export default function VisualizationControls({
                 <option value="equal">{t("visualization.equal")}</option>
               </select>
             </label>
-          </>
+          </div>
         )}
+
         {hasPoints && (
-          <label>
-            <span>{t("visualization.pointSize")}</span>
-            <select
-              value={settings.pointSizeField ?? ""}
-              onChange={(event) => onChange({ pointSizeField: event.target.value || null })}
-            >
-              <option value="">{t("visualization.defaultSize")}</option>
-              {numericColumns.map((column) => (
-                <option key={column.name} value={column.name}>{column.name}</option>
-              ))}
-            </select>
-          </label>
+          <fieldset className="visualization-controls__group visualization-controls__point-group">
+            <legend>{t("visualization.pointOptions")}</legend>
+            <div className="visualization-controls__point-fields">
+              {hasNumericColumns && (
+                <label className="visualization-controls__field">
+                  <span>{t("visualization.pointSize")}</span>
+                  <select
+                    value={settings.pointSizeField ?? ""}
+                    onChange={(event) => onChange({ pointSizeField: event.target.value || null })}
+                  >
+                    <option value="">{t("visualization.defaultSize")}</option>
+                    {numericColumns.map((column) => (
+                      <option key={column.name} value={column.name}>{column.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="visualization-controls__switch">
+                <input
+                  type="checkbox"
+                  checked={settings.cluster}
+                  onChange={(event) => onChange({ cluster: event.target.checked })}
+                />
+                <span className="visualization-controls__switch-track" aria-hidden="true">
+                  <span />
+                </span>
+                <span>{t("visualization.cluster")}</span>
+              </label>
+            </div>
+          </fieldset>
         )}
-        {hasPoints && (
-          <label className="visualization-controls__check">
-            <input
-              type="checkbox"
-              checked={settings.cluster}
-              onChange={(event) => onChange({ cluster: event.target.checked })}
-            />
-            <span>{t("visualization.cluster")}</span>
-          </label>
-        )}
-      </div>
+        </div>
+      </details>
     </section>
   );
 }
