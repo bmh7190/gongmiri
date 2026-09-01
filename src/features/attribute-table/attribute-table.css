@@ -145,6 +145,8 @@
 .react-table__filters[open] summary { margin-bottom: 10px; border-bottom: 1px solid var(--color-border); }
 .react-table__filters .react-table__tool-row { padding: 0 12px; }
 .react-table__viewport {
+  --react-table-grid-line: var(--color-row-border);
+  --react-table-grid-line-strong: var(--color-border-strong);
   position: relative;
   height: 440px;
   overflow: auto;
@@ -155,7 +157,11 @@
   background: var(--color-surface);
   scrollbar-gutter: stable;
 }
-.react-table__header, .react-table__row { display: grid; min-width: max-content; }
+.react-table__header, .react-table__row {
+  display: grid;
+  min-width: max-content;
+  grid-template-columns: var(--react-table-columns);
+}
 .react-table__header {
   position: sticky;
   top: 0;
@@ -165,16 +171,19 @@
   background: var(--color-surface-subtle);
 }
 .react-table__header > span, .react-table__row > span {
+  position: relative;
   min-width: 0;
   overflow: hidden;
-  border-right: 1px solid var(--color-border);
   padding: 8px 10px;
+  box-shadow: inset -1px 0 var(--react-table-grid-line);
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
   font-size: 12px;
 }
-.react-table__header > span { position: relative; color: var(--color-text); font-weight: 700; }
+.react-table__header > span:last-child,
+.react-table__row > span:last-child { box-shadow: none; }
+.react-table__header > span { overflow: visible; color: var(--color-text); font-weight: 700; }
 .react-table__header > span:not(:first-child) { padding: 0; }
 .react-table__sort-button {
   display: flex;
@@ -197,11 +206,11 @@
 .react-table__sort-button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .react-table__resizer {
   position: absolute;
-  top: 5px;
-  right: -4px;
-  z-index: 2;
-  width: 9px;
-  height: calc(100% - 10px);
+  top: 0;
+  right: -6px;
+  z-index: 4;
+  width: 13px;
+  height: 100%;
   border: 0;
   padding: 0;
   background: transparent;
@@ -210,11 +219,11 @@
 }
 .react-table__resizer::after {
   position: absolute;
-  top: 0;
-  left: 4px;
+  top: 5px;
+  left: 6px;
   width: 1px;
-  height: 100%;
-  background: var(--color-border-strong);
+  height: calc(100% - 10px);
+  background: var(--react-table-grid-line-strong);
   content: "";
 }
 .react-table__resizer:hover::after,
@@ -229,6 +238,8 @@
   padding: 0;
   color: var(--color-text);
   background: var(--color-surface);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 .react-table__row:hover { background: var(--color-primary-soft); }
@@ -237,8 +248,15 @@
 .react-table__row > span:first-child, .react-table__header > span:first-child { text-align: center; }
 .react-table__header > .is-pinned { position: sticky; z-index: 3; background: var(--color-surface-subtle); }
 .react-table__row > .is-pinned { position: sticky; z-index: 1; background: inherit; }
-.react-table__header > .is-pinned:not(:last-child),
-.react-table__row > .is-pinned:not(:last-child) { box-shadow: 1px 0 var(--color-border-strong); }
+.react-table__header > .is-pinned-edge,
+.react-table__row > .is-pinned-edge {
+  box-shadow: inset -1px 0 var(--react-table-grid-line), 2px 0 0 var(--react-table-grid-line-strong);
+}
+.react-table__header > .is-resizing,
+.react-table__row > .is-resizing {
+  box-shadow: inset -2px 0 var(--color-primary);
+  background: var(--color-primary-soft);
+}
 .react-table__pagination {
   display: flex;
   align-items: center;
