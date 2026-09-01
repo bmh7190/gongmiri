@@ -312,6 +312,16 @@ try {
     const handleIndex = handles.indexOf(handle);
     const rect = handle.getBoundingClientRect();
     const header = handle.closest('[role="columnheader"]');
+    const headerRect = header.getBoundingClientRect();
+    const visibleCell = [...document.querySelectorAll('[role="gridcell"]')].find((candidate) => {
+      const candidateRect = candidate.getBoundingClientRect();
+      return candidateRect.top >= viewportRect.top + 36
+        && candidateRect.bottom <= viewportRect.bottom
+        && candidateRect.left >= viewportRect.left
+        && candidateRect.right <= viewportRect.right;
+    });
+    if (!visibleCell) throw new Error('Visible grid cell was not found.');
+    const cellRect = visibleCell.getBoundingClientRect();
     const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
     return {
       target: header.textContent.trim(),
@@ -323,6 +333,10 @@ try {
       y: rect.y + rect.height / 2,
       viewportX: viewportRect.x + viewportRect.width / 2,
       viewportY: viewportRect.y + viewportRect.height / 2,
+      headerX: headerRect.x + Math.min(headerRect.width / 2, headerRect.width - 16),
+      headerY: headerRect.y + headerRect.height / 2,
+      cellX: cellRect.x + cellRect.width / 2,
+      cellY: cellRect.y + cellRect.height / 2,
       width: header.getBoundingClientRect().width,
       appTop: app.scrollTop,
       appHeight: app.scrollHeight,
@@ -407,6 +421,51 @@ try {
     await new Promise(requestAnimationFrame);
   })()`);
 
+  await cdp.evaluate(`(() => {
+    const nativeScrollIntoView = Element.prototype.scrollIntoView;
+    window.__gongmiriScrollIntoViewCalls = [];
+    Element.prototype.scrollIntoView = function (...args) {
+      const app = document.querySelector('.react-app') || document.scrollingElement;
+      const viewport = document.querySelector('.react-table__grid');
+      const before = { appTop: app.scrollTop, viewportTop: viewport.scrollTop };
+      nativeScrollIntoView.apply(this, args);
+      window.__gongmiriScrollIntoViewCalls.push({
+        role: this.getAttribute?.('role') ?? this.tagName,
+        before,
+        afterNativeCall: { appTop: app.scrollTop, viewportTop: viewport.scrollTop },
+      });
+    };
+  })()`);
+  const interactionStates = [];
+  for (let index = 0; index < 2; index += 1) {
+    await dispatchMouse(cdp, "mouseMoved", initial.headerX, initial.headerY, 0);
+    await dispatchMouse(cdp, "mousePressed", initial.headerX, initial.headerY, 1, 1);
+    await dispatchMouse(cdp, "mouseReleased", initial.headerX, initial.headerY, 0, 1);
+    await delay(50);
+  }
+  await delay(100);
+  interactionStates.push({ stage: "sort-column", ...(await readState()) });
+  await cdp.evaluate(`(() => {
+    const app = document.querySelector('.react-app') || document.scrollingElement;
+    const viewport = document.querySelector('.react-table__grid');
+    app.scrollTop = ${initial.appTop};
+    viewport.scrollTop = ${initial.viewportTop};
+  })()`);
+  for (let index = 0; index < 2; index += 1) {
+    await dispatchMouse(cdp, "mouseMoved", initial.cellX, initial.cellY, 0);
+    await dispatchMouse(cdp, "mousePressed", initial.cellX, initial.cellY, 1, 1);
+    await dispatchMouse(cdp, "mouseReleased", initial.cellX, initial.cellY, 0, 1);
+    await delay(50);
+  }
+  await delay(100);
+  interactionStates.push({ stage: "select-cell", ...(await readState()) });
+  const scrollIntoViewCalls = await cdp.evaluate("window.__gongmiriScrollIntoViewCalls");
+  assert.ok(scrollIntoViewCalls.length >= 2, "Grid interactions did not exercise scrollIntoView.");
+  for (const state of interactionStates) {
+    assertScrollPosition(state, state.stage);
+  }
+  console.log(JSON.stringify({ interactionStates, scrollIntoViewCalls }, null, 2));
+
   await dispatchMouse(cdp, "mouseMoved", initial.x, initial.y, 0);
   const hovered = await readState();
   assertScrollPosition(hovered, "hover");
@@ -446,6 +505,8 @@ try {
     initial,
     trackpadStates,
     boundaryStates,
+    interactionStates,
+    scrollIntoViewCalls,
     hovered,
     clicked,
     resized,

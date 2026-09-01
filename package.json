@@ -4,6 +4,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/patch-react-data-grid.mjs",
     "dev": "vite",
     "dev:react": "vite --config vite.react.config.ts",
     "typecheck": "npm run typecheck:react && npm run typecheck:node",
