@@ -587,25 +587,23 @@ export default function AttributeTable({
             })}
         </div>
       </div>
-      {pageCount > 1 && (
-        <nav className="react-table__pagination" aria-label={t("table.pagination")}>
-          <button
-            type="button"
-            disabled={pageIndex === 0}
-            onClick={() => showPage(Math.max(0, pageIndex - 1))}
-          >
-            {t("table.previousPage")}
-          </button>
-          <span>{t("table.pageStatus", { current: pageIndex + 1, total: pageCount })}</span>
-          <button
-            type="button"
-            disabled={pageIndex >= pageCount - 1}
-            onClick={() => showPage(Math.min(pageCount - 1, pageIndex + 1))}
-          >
-            {t("table.nextPage")}
-          </button>
-        </nav>
-      )}
+      <nav className="react-table__pagination" aria-label={t("table.pagination")}>
+        <button
+          type="button"
+          disabled={pageIndex === 0}
+          onClick={() => showPage(Math.max(0, pageIndex - 1))}
+        >
+          {t("table.previousPage")}
+        </button>
+        <span>{t("table.pageStatus", { current: pageIndex + 1, total: pageCount })}</span>
+        <button
+          type="button"
+          disabled={pageIndex >= pageCount - 1}
+          onClick={() => showPage(Math.min(pageCount - 1, pageIndex + 1))}
+        >
+          {t("table.nextPage")}
+        </button>
+      </nav>
     </section>
   );
 }

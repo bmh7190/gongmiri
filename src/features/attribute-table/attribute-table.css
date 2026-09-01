@@ -1,4 +1,4 @@
-.react-table { display: grid; gap: 14px; }
+.react-table { display: grid; gap: 14px; overflow-anchor: none; }
 .react-table__title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .react-table__title h2 { margin: 0; font-size: 18px; }
 .react-table__title p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
@@ -146,8 +146,7 @@
 .react-table__filters .react-table__tool-row { padding: 0 12px; }
 .react-table__viewport {
   position: relative;
-  max-height: 440px;
-  min-height: 240px;
+  height: 440px;
   overflow: auto;
   overflow-anchor: none;
   overscroll-behavior: contain;
@@ -262,5 +261,5 @@
   .react-table__tool-row--primary,
   .react-table__tool-row--filters { grid-template-columns: 1fr 1fr; }
   .react-table__tool-row--primary label:first-child { grid-column: 1 / -1; }
-  .react-table__viewport { max-height: 360px; }
+  .react-table__viewport { height: 360px; }
 }

@@ -80,6 +80,8 @@ describe("AttributeTable", () => {
     expect(html).toContain("Move name column");
     expect(html).toContain('aria-pressed="false"');
     expect(html).not.toContain("Sort column");
+    expect(html).toContain("Page 1 of 1");
+    expect(html).toContain('disabled=""');
   });
 
   it("renders a bounded native row page instead of a virtualized body", async () => {
