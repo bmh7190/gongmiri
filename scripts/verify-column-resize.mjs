@@ -460,7 +460,11 @@ try {
   await delay(100);
   interactionStates.push({ stage: "select-cell", ...(await readState()) });
   const scrollIntoViewCalls = await cdp.evaluate("window.__gongmiriScrollIntoViewCalls");
-  assert.ok(scrollIntoViewCalls.length >= 2, "Grid interactions did not exercise scrollIntoView.");
+  assert.equal(
+    scrollIntoViewCalls.length,
+    0,
+    "Grid interactions escaped to the document-level scrollIntoView API.",
+  );
   for (const state of interactionStates) {
     assertScrollPosition(state, state.stage);
   }

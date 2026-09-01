@@ -98,7 +98,6 @@ const useIsolatedGridScroll = () => {
     const outer = grid?.closest<HTMLElement>(".react-app");
     if (!grid || !outer) return;
 
-    let pointerInside = false;
     let interactionLocked = false;
     let restoring = false;
     let releaseToken = 0;
@@ -151,13 +150,6 @@ const useIsolatedGridScroll = () => {
       lockedPosition.gridTop = grid.scrollTop;
       lockedPosition.gridLeft = grid.scrollLeft;
     };
-    const handlePointerEnter = () => {
-      pointerInside = true;
-      rememberPosition();
-    };
-    const handlePointerLeave = () => {
-      pointerInside = false;
-    };
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target?.closest("[role='columnheader'], [role='gridcell'], .rdg-resize-handle")) {
@@ -187,12 +179,10 @@ const useIsolatedGridScroll = () => {
       if (interactionLocked) restoreInteraction();
     };
     const handleOuterScroll = () => {
-      if (pointerInside || interactionLocked) restoreOuter();
+      if (interactionLocked) restoreOuter();
     };
 
     grid.addEventListener("wheel", handleWheel, { capture: true, passive: false });
-    grid.addEventListener("pointerenter", handlePointerEnter);
-    grid.addEventListener("pointerleave", handlePointerLeave);
     grid.addEventListener("pointerdown", handlePointerDown, true);
     grid.addEventListener("scroll", handleGridScroll);
     outer.addEventListener("scroll", handleOuterScroll);
@@ -201,8 +191,6 @@ const useIsolatedGridScroll = () => {
     return () => {
       releaseToken += 1;
       grid.removeEventListener("wheel", handleWheel, true);
-      grid.removeEventListener("pointerenter", handlePointerEnter);
-      grid.removeEventListener("pointerleave", handlePointerLeave);
       grid.removeEventListener("pointerdown", handlePointerDown, true);
       grid.removeEventListener("scroll", handleGridScroll);
       outer.removeEventListener("scroll", handleOuterScroll);
