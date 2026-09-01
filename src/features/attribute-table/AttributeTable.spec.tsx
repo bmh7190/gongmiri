@@ -4,7 +4,7 @@ import { I18nextProvider } from "react-i18next";
 import { renderToStaticMarkup } from "react-dom/server";
 import { messages } from "../../locales/messages";
 import type { ColumnStat, FeatureCollectionGeometry } from "../../domain/types";
-import AttributeTable from "./AttributeTable";
+import AttributeTable, { shouldContainTableWheel } from "./AttributeTable";
 
 const collection: FeatureCollectionGeometry = {
   type: "FeatureCollection",
@@ -31,6 +31,18 @@ const columns: ColumnStat[] = ["name", "score"].map((name) => ({
 }));
 
 describe("AttributeTable", () => {
+  it("contains only wheel input that would leave a vertical table boundary", () => {
+    const viewport = { clientHeight: 440, scrollHeight: 3_400 };
+
+    expect(shouldContainTableWheel({ ...viewport, scrollTop: 0, deltaY: -120 })).toBe(true);
+    expect(shouldContainTableWheel({ ...viewport, scrollTop: 0, deltaY: 120 })).toBe(false);
+    expect(shouldContainTableWheel({ ...viewport, scrollTop: 800, deltaY: -120 })).toBe(false);
+    expect(shouldContainTableWheel({ ...viewport, scrollTop: 800, deltaY: 120 })).toBe(false);
+    expect(shouldContainTableWheel({ ...viewport, scrollTop: 2_960, deltaY: 120 })).toBe(true);
+    expect(shouldContainTableWheel({ ...viewport, scrollTop: 2_960, deltaY: -120 })).toBe(false);
+    expect(shouldContainTableWheel({ ...viewport, scrollTop: 0, deltaY: 0 })).toBe(false);
+  });
+
   it("renders sortable column headers and keeps detailed filters collapsed", async () => {
     const i18n = createInstance();
     await i18n.init({

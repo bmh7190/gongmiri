@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
 } from "react";
@@ -50,6 +51,23 @@ import "./attribute-table.css";
 
 const ROWS_PER_PAGE = 100;
 const WIDTH_SAMPLE_LIMIT = 400;
+
+export const shouldContainTableWheel = ({
+  scrollTop,
+  clientHeight,
+  scrollHeight,
+  deltaY,
+}: {
+  scrollTop: number;
+  clientHeight: number;
+  scrollHeight: number;
+  deltaY: number;
+}) => {
+  if (deltaY === 0) return false;
+  const atTop = scrollTop <= 0;
+  const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+  return (deltaY < 0 && atTop) || (deltaY > 0 && atBottom);
+};
 
 const TABLE_FEATURES = tableFeatures({
   columnOrderingFeature,
@@ -172,6 +190,7 @@ export default function AttributeTable({
   onFilteredIdsChange,
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
@@ -281,12 +300,39 @@ export default function AttributeTable({
   const pageRows = rows.slice(pageStart, pageStart + ROWS_PER_PAGE);
 
   useEffect(() => {
-    setPageIndex((current) => Math.min(current, pageCount - 1));
-  }, [pageCount]);
+    if (pageIndex < pageCount) return;
+    setPageIndex(pageCount - 1);
+    viewportRef.current?.scrollTo({ top: 0 });
+  }, [pageCount, pageIndex]);
 
   useEffect(() => {
     onFilteredIdsChange?.(rows.map((row) => row.original.id));
   }, [onFilteredIdsChange, rows]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const containBoundaryWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaY === 0) return;
+      if (!shouldContainTableWheel({
+        scrollTop: viewport.scrollTop,
+        clientHeight: viewport.clientHeight,
+        scrollHeight: viewport.scrollHeight,
+        deltaY: event.deltaY,
+      })) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    viewport.addEventListener("wheel", containBoundaryWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", containBoundaryWheel);
+  }, []);
+
+  const showPage = (nextPage: number) => {
+    setPageIndex(nextPage);
+    viewportRef.current?.scrollTo({ top: 0 });
+  };
 
   const handleRowKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -300,7 +346,7 @@ export default function AttributeTable({
     );
     const next = rows[nextIndex];
     if (next) {
-      setPageIndex(Math.floor(nextIndex / ROWS_PER_PAGE));
+      showPage(Math.floor(nextIndex / ROWS_PER_PAGE));
       onSelect(next.original.id);
     }
   };
@@ -423,6 +469,7 @@ export default function AttributeTable({
       </div>
 
       <div
+        ref={viewportRef}
         className="react-table__viewport"
         role="grid"
         aria-rowcount={rows.length}
@@ -545,7 +592,7 @@ export default function AttributeTable({
           <button
             type="button"
             disabled={pageIndex === 0}
-            onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+            onClick={() => showPage(Math.max(0, pageIndex - 1))}
           >
             {t("table.previousPage")}
           </button>
@@ -553,7 +600,7 @@ export default function AttributeTable({
           <button
             type="button"
             disabled={pageIndex >= pageCount - 1}
-            onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
+            onClick={() => showPage(Math.min(pageCount - 1, pageIndex + 1))}
           >
             {t("table.nextPage")}
           </button>
