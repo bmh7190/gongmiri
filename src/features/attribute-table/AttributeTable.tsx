@@ -1,16 +1,17 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
-  type CSSProperties,
-  type KeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  DataGrid,
+  type Column as GridColumn,
+  type ColumnWidths,
+  type SortColumn as GridSortColumn,
+} from "react-data-grid";
+import "react-data-grid/lib/styles.css";
 import {
   DndContext,
   KeyboardSensor,
@@ -31,8 +32,6 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   columnOrderingFeature,
   columnPinningFeature,
-  columnResizingFeature,
-  columnSizingFeature,
   columnVisibilityFeature,
   createColumnHelper,
   createSortedRowModel,
@@ -54,58 +53,11 @@ import {
 } from "../../domain/attribute-rows";
 import "./attribute-table.css";
 
-const ROWS_PER_PAGE = 100;
 const WIDTH_SAMPLE_LIMIT = 400;
-
-export const shouldContainTableWheel = ({
-  scrollTop,
-  clientHeight,
-  scrollHeight,
-  deltaY,
-}: {
-  scrollTop: number;
-  clientHeight: number;
-  scrollHeight: number;
-  deltaY: number;
-}) => {
-  if (deltaY === 0) return false;
-  const atTop = scrollTop <= 0;
-  const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
-  return (deltaY < 0 && atTop) || (deltaY > 0 && atBottom);
-};
-
-type ScrollTarget = {
-  scrollTop: number;
-  scrollLeft: number;
-};
-
-export type TableScrollPosition = {
-  viewportTop: number;
-  viewportLeft: number;
-  appTop: number;
-  appLeft: number;
-};
-
-export const restoreTableScrollPosition = (
-  position: TableScrollPosition,
-  viewport: ScrollTarget | null,
-  appScroller: ScrollTarget | null,
-) => {
-  if (viewport) {
-    viewport.scrollTop = position.viewportTop;
-    viewport.scrollLeft = position.viewportLeft;
-  }
-  if (appScroller) {
-    appScroller.scrollTop = position.appTop;
-    appScroller.scrollLeft = position.appLeft;
-  }
-};
 
 const TABLE_FEATURES = tableFeatures({
   columnOrderingFeature,
   columnPinningFeature,
-  columnResizingFeature,
-  columnSizingFeature,
   columnVisibilityFeature,
   rowSortingFeature,
   sortedRowModel: createSortedRowModel(),
@@ -113,6 +65,7 @@ const TABLE_FEATURES = tableFeatures({
 const columnHelper = createColumnHelper<typeof TABLE_FEATURES, AttributeRow>();
 
 type AttributeColumn = Column<typeof TABLE_FEATURES, AttributeRow, unknown>;
+type GridAttributeRow = AttributeRow & { __rowNumber: number };
 
 type SortableColumnOptionProps = {
   column: AttributeColumn;
@@ -228,23 +181,13 @@ export default function AttributeTable({
   exportOpen = false,
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const pendingSortScrollRef = useRef<{
-    position: TableScrollPosition;
-    appScroller: HTMLElement | null;
-  } | null>(null);
-  const pendingResizeScrollRef = useRef<{
-    position: TableScrollPosition;
-    appScroller: HTMLElement | null;
-  } | null>(null);
-  const resizeScrollLockCleanupRef = useRef<(() => void) | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
   const [emptyFilter, setEmptyFilter] = useState<EmptyValueFilter>("all");
   const [minimum, setMinimum] = useState("");
   const [maximum, setMaximum] = useState("");
-  const [pageIndex, setPageIndex] = useState(0);
+  const [gridColumnWidths, setGridColumnWidths] = useState<ColumnWidths>(() => new Map());
 
   const sourceRows = useMemo(
     () =>
@@ -281,19 +224,21 @@ export default function AttributeTable({
     () => filteredRows.map((row) => row.id),
     [filteredRows],
   );
-  const tableColumns = useMemo(() => {
+  const estimatedColumnWidths = useMemo(() => {
     const stride = Math.max(1, Math.floor(sourceRows.length / WIDTH_SAMPLE_LIMIT));
     const sample = sourceRows
       .filter((_, index) => index % stride === 0)
       .slice(0, WIDTH_SAMPLE_LIMIT);
+    return new Map(columnOrder.map((column) => [
+      column,
+      estimateWidth([column, ...sample.map((row) => row.properties[column])]),
+    ]));
+  }, [columnOrder, sourceRows]);
+  const tableColumns = useMemo(() => {
     return columnHelper.columns([
       columnHelper.display({
         id: "__rowNumber",
         header: "",
-        size: 54,
-        minSize: 54,
-        maxSize: 54,
-        enableResizing: false,
         enableSorting: false,
       }),
       ...columnOrder.map((column) => columnHelper.accessor(
@@ -302,11 +247,6 @@ export default function AttributeTable({
           id: column,
           header: column || t("table.unnamed"),
           cell: (cell) => formatCell(cell.getValue()),
-          minSize: 80,
-          size: estimateWidth([
-            column,
-            ...sample.map((row) => row.properties[column]),
-          ]),
           sortFn: (left, right) => compareAttributeValues(
             left.original.properties[column],
             right.original.properties[column],
@@ -315,7 +255,7 @@ export default function AttributeTable({
         },
       )),
     ]);
-  }, [columnOrder, sourceRows, t]);
+  }, [columnOrder, t]);
   const table = useTable(
     {
       features: TABLE_FEATURES,
@@ -325,7 +265,6 @@ export default function AttributeTable({
       enableMultiSort: false,
       enableSortingRemoval: true,
       sortDescFirst: false,
-      columnResizeMode: "onEnd",
       initialState: {
         columnPinning: { start: ["__rowNumber"], end: [] },
       },
@@ -333,7 +272,6 @@ export default function AttributeTable({
     (state) => ({
       columnOrder: state.columnOrder,
       columnPinning: state.columnPinning,
-      columnSizing: state.columnSizing,
       columnVisibility: state.columnVisibility,
       sorting: state.sorting,
     }),
@@ -363,78 +301,51 @@ export default function AttributeTable({
     if (previousIndex < 0 || nextIndex < 0) return;
     table.setColumnOrder(["__rowNumber", ...arrayMove(order, previousIndex, nextIndex)]);
   };
-  const getColumnWidth = useCallback((column: AttributeColumn) => {
-    return column.getSize();
-  }, []);
-  const rowTemplate = visibleColumns
-    .map((column) => `${getColumnWidth(column)}px`)
-    .join(" ");
-  const columnGridStyle = {
-    "--react-table-columns": rowTemplate,
-  } as CSSProperties;
-  const startPinnedColumns = visibleColumns.filter(
-    (column) => column.getIsPinned() === "start",
+  const gridRows = useMemo<GridAttributeRow[]>(
+    () => rows.map((row, index) => ({ ...row.original, __rowNumber: index + 1 })),
+    [rows],
   );
-  const endPinnedColumns = visibleColumns.filter(
-    (column) => column.getIsPinned() === "end",
+  const gridColumns = useMemo<readonly GridColumn<GridAttributeRow>[]>(
+    () => visibleColumns.map((column) => {
+      const pinned = column.getIsPinned();
+      if (column.id === "__rowNumber") {
+        return {
+          key: column.id,
+          name: "",
+          width: 54,
+          minWidth: 54,
+          maxWidth: 54,
+          frozen: "start",
+          resizable: false,
+          sortable: false,
+          draggable: false,
+          renderCell: ({ row }) => row.__rowNumber,
+        };
+      }
+      return {
+        key: column.id,
+        name: column.id || t("table.unnamed"),
+        width: estimatedColumnWidths.get(column.id) ?? 150,
+        minWidth: 80,
+        frozen: pinned === "start" ? "start" : pinned === "end" ? "end" : false,
+        resizable: true,
+        sortable: true,
+        draggable: true,
+        renderCell: ({ row }) => formatCell(row.properties[column.id]),
+      };
+    }),
+    [estimatedColumnWidths, t, visibleDataColumnOrderKey, visibleColumns],
   );
-  const startPinnedOffsets = new Map<string, number>();
-  let startPinnedOffset = 0;
-  startPinnedColumns.forEach((column) => {
-    startPinnedOffsets.set(column.id, startPinnedOffset);
-    startPinnedOffset += getColumnWidth(column);
-  });
-  const endPinnedOffsets = new Map<string, number>();
-  let endPinnedOffset = 0;
-  [...endPinnedColumns].reverse().forEach((column) => {
-    endPinnedOffsets.set(column.id, endPinnedOffset);
-    endPinnedOffset += getColumnWidth(column);
-  });
-  const startPinnedEdgeId = startPinnedColumns[startPinnedColumns.length - 1]?.id;
-  const endPinnedEdgeId = endPinnedColumns[0]?.id;
-  const getCellClassName = useCallback((column: AttributeColumn) => {
-    const pinned = column.getIsPinned();
-    return [
-      pinned ? "is-pinned" : "",
-      (pinned === "start" && column.id === startPinnedEdgeId)
-      || (pinned === "end" && column.id === endPinnedEdgeId)
-        ? "is-pinned-edge"
-        : "",
-    ].filter(Boolean).join(" ") || undefined;
-  }, [endPinnedEdgeId, startPinnedEdgeId]);
-  const pinnedOffsetsKey = [
-    ...startPinnedColumns.map(
-      (column) => `${column.id}:${startPinnedOffsets.get(column.id) ?? 0}`,
-    ),
-    ...endPinnedColumns.map(
-      (column) => `${column.id}:${endPinnedOffsets.get(column.id) ?? 0}`,
-    ),
-  ].join("|");
-  const getPinnedStyle = useCallback((column: AttributeColumn) => {
-    const pinned = column.getIsPinned();
-    if (pinned === "start") {
-      return { left: `${startPinnedOffsets.get(column.id) ?? 0}px` };
-    }
-    if (pinned === "end") {
-      return { right: `${endPinnedOffsets.get(column.id) ?? 0}px` };
-    }
-    return undefined;
-  }, [pinnedOffsetsKey]);
-  const pageCount = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
-  const pageStart = pageIndex * ROWS_PER_PAGE;
-  const pageRows = useMemo(
-    () => rows.slice(pageStart, pageStart + ROWS_PER_PAGE),
-    [pageStart, rows],
+  const gridSortColumns = useMemo<readonly GridSortColumn[]>(
+    () => table.state.sorting.map((sorting) => ({
+      columnKey: sorting.id,
+      direction: sorting.desc ? "DESC" : "ASC",
+    })),
+    [table.state.sorting],
   );
 
   useEffect(() => {
-    if (pageIndex < pageCount) return;
-    setPageIndex(pageCount - 1);
-    viewportRef.current?.scrollTo({ top: 0 });
-  }, [pageCount, pageIndex]);
-
-  useEffect(() => {
-    table.resetColumnSizing(true);
+    setGridColumnWidths(new Map());
   }, [collection]);
 
   useEffect(() => {
@@ -445,236 +356,20 @@ export default function AttributeTable({
     onVisibleColumnOrderChange?.(visibleDataColumnIds);
   }, [onVisibleColumnOrderChange, visibleDataColumnOrderKey]);
 
-  useLayoutEffect(() => {
-    const pending = pendingSortScrollRef.current;
-    if (!pending) return;
-    pendingSortScrollRef.current = null;
-
-    const restoreScroll = () => {
-      restoreTableScrollPosition(
-        pending.position,
-        viewportRef.current,
-        pending.appScroller,
-      );
-    };
-
-    restoreScroll();
-    const frame = requestAnimationFrame(restoreScroll);
-    return () => cancelAnimationFrame(frame);
-  });
-
-  useLayoutEffect(() => {
-    const pending = pendingResizeScrollRef.current;
-    if (!pending) return;
-    pendingResizeScrollRef.current = null;
-
-    const restoreScroll = () => {
-      restoreTableScrollPosition(
-        pending.position,
-        viewportRef.current,
-        pending.appScroller,
-      );
-    };
-
-    restoreScroll();
-    const frame = requestAnimationFrame(restoreScroll);
-    return () => cancelAnimationFrame(frame);
-  });
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    const containBoundaryWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.deltaY === 0) return;
-      if (!shouldContainTableWheel({
-        scrollTop: viewport.scrollTop,
-        clientHeight: viewport.clientHeight,
-        scrollHeight: viewport.scrollHeight,
-        deltaY: event.deltaY,
-      })) return;
-      event.preventDefault();
-      event.stopPropagation();
-    };
-
-    viewport.addEventListener("wheel", containBoundaryWheel, { passive: false });
-    return () => viewport.removeEventListener("wheel", containBoundaryWheel);
-  }, []);
-
-  useEffect(() => () => {
-    resizeScrollLockCleanupRef.current?.();
-  }, []);
-
-  const showPage = (nextPage: number) => {
-    setPageIndex(nextPage);
-    viewportRef.current?.scrollTo({ top: 0 });
-  };
-
-  const handleSort = (
-    event: ReactMouseEvent<HTMLButtonElement>,
-  ) => {
-    const viewport = viewportRef.current;
-    const appScroller = viewport?.closest<HTMLElement>(".react-app") ?? null;
-    if (viewport) {
-      pendingSortScrollRef.current = {
-        position: {
-          viewportTop: viewport.scrollTop,
-          viewportLeft: viewport.scrollLeft,
-          appTop: appScroller?.scrollTop ?? 0,
-          appLeft: appScroller?.scrollLeft ?? 0,
-        },
-        appScroller,
-      };
-    }
-    const columnId = event.currentTarget
-      .closest<HTMLElement>("[data-column-id]")
-      ?.dataset.columnId;
-    if (columnId) {
-      table.getColumn(columnId)?.getToggleSortingHandler()?.(event);
-    }
-  };
-
-  const captureResizeScroll = () => {
-    const viewport = viewportRef.current;
-    const appScroller = viewport?.closest<HTMLElement>(".react-app") ?? null;
-    pendingResizeScrollRef.current = viewport ? {
-      position: {
-        viewportTop: viewport.scrollTop,
-        viewportLeft: viewport.scrollLeft,
-        appTop: appScroller?.scrollTop ?? 0,
-        appLeft: appScroller?.scrollLeft ?? 0,
-      },
-      appScroller,
-    } : null;
-    return pendingResizeScrollRef.current;
-  };
-
-  const lockResizeScrollUntilRelease = (ownerDocument: Document) => {
-    resizeScrollLockCleanupRef.current?.();
-    const pending = pendingResizeScrollRef.current;
-    const viewport = viewportRef.current;
-    if (!pending || !viewport) return;
-
-    let restoring = false;
-    const restoreScroll = () => {
-      if (restoring) return;
-      restoring = true;
-      restoreTableScrollPosition(
-        pending.position,
-        viewportRef.current,
-        pending.appScroller,
-      );
-      restoring = false;
-    };
-    const handleUnexpectedScroll = () => restoreScroll();
-    const cleanup = () => {
-      viewport.removeEventListener("scroll", handleUnexpectedScroll);
-      pending.appScroller?.removeEventListener("scroll", handleUnexpectedScroll);
-      ownerDocument.removeEventListener("mouseup", finish);
-      ownerDocument.removeEventListener("touchend", finish);
-      ownerDocument.removeEventListener("touchcancel", finish);
-      if (resizeScrollLockCleanupRef.current === cleanup) {
-        resizeScrollLockCleanupRef.current = null;
-      }
-    };
-    const finish = () => {
-      restoreScroll();
-      cleanup();
-      requestAnimationFrame(restoreScroll);
-    };
-
-    viewport.addEventListener("scroll", handleUnexpectedScroll, { passive: true });
-    pending.appScroller?.addEventListener("scroll", handleUnexpectedScroll, { passive: true });
-    ownerDocument.addEventListener("mouseup", finish);
-    ownerDocument.addEventListener("touchend", finish);
-    ownerDocument.addEventListener("touchcancel", finish);
-    resizeScrollLockCleanupRef.current = cleanup;
-  };
-
-  const beginLibraryColumnResize = (
-    event: ReactMouseEvent<HTMLSpanElement> | ReactTouchEvent<HTMLSpanElement>,
-    resizeHandler: (event: unknown) => void,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    captureResizeScroll();
-    resizeHandler(event);
-    lockResizeScrollUntilRelease(event.currentTarget.ownerDocument);
-  };
-
-  const handleRowKeyDown = useCallback((
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) => {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    const nextIndex = Math.min(
-      rows.length - 1,
-      Math.max(0, index + (event.key === "ArrowDown" ? 1 : -1)),
-    );
-    const next = rows[nextIndex];
-    if (next) {
-      showPage(Math.floor(nextIndex / ROWS_PER_PAGE));
-      onSelect(next.original.id);
-    }
-  }, [onSelect, rows]);
-
-  const renderedPageRows = useMemo(() => pageRows.map((row, pageRowIndex) => {
-    const absoluteIndex = pageStart + pageRowIndex;
-    const selected = row.original.id === selectedId;
-    return (
-      <button
-        key={row.id}
-        type="button"
-        role="row"
-        aria-rowindex={absoluteIndex + 1}
-        aria-selected={selected}
-        className={`react-table__row${selected ? " is-selected" : ""}`}
-        onClick={() => onSelect(row.original.id)}
-        onKeyDown={(event) => handleRowKeyDown(event, absoluteIndex)}
-      >
-        {row.getVisibleCells().map((cell) => {
-          const pinnedStyle = getPinnedStyle(cell.column);
-          if (cell.column.id === "__rowNumber") {
-            return (
-              <span
-                key={cell.id}
-                role="gridcell"
-                data-column-id={cell.column.id}
-                className={getCellClassName(cell.column)}
-                style={pinnedStyle}
-              >
-                {absoluteIndex + 1}
-              </span>
-            );
-          }
-          const value = formatCell(cell.getValue());
-          return (
-            <span
-              key={cell.id}
-              role="gridcell"
-              title={value}
-              data-column-id={cell.column.id}
-              className={getCellClassName(cell.column)}
-              style={pinnedStyle}
-            >
-              <table.FlexRender cell={cell} />
-            </span>
-          );
-        })}
-      </button>
-    );
-  }), [
-    getCellClassName,
-    getPinnedStyle,
-    handleRowKeyDown,
-    onSelect,
-    pageRows,
-    pageStart,
-    pinnedOffsetsKey,
-    selectedId,
-    table.FlexRender,
-  ]);
+  const handleGridSortChange = useCallback((next: GridSortColumn[]) => {
+    const sorting = next.at(-1);
+    table.setSorting(sorting ? [{
+      id: sorting.columnKey,
+      desc: sorting.direction === "DESC",
+    }] : []);
+  }, [table]);
+  const handleGridColumnReorder = useCallback((sourceId: string, targetId: string) => {
+    const order = dataColumns.map((column) => column.id);
+    const previousIndex = order.indexOf(sourceId);
+    const nextIndex = order.indexOf(targetId);
+    if (previousIndex < 0 || nextIndex < 0) return;
+    table.setColumnOrder(["__rowNumber", ...arrayMove(order, previousIndex, nextIndex)]);
+  }, [dataColumns, table]);
 
   return (
     <section className="react-table" aria-labelledby="attribute-table-title">
@@ -808,115 +503,28 @@ export default function AttributeTable({
         </details>
       </div>
 
-      <div
-        ref={viewportRef}
-        className="react-table__viewport"
-        role="grid"
-        aria-rowcount={rows.length}
-        aria-colcount={visibleColumns.length}
-        style={columnGridStyle}
-      >
-        {headerGroups.map((headerGroup) => (
-          <div
-            key={headerGroup.id}
-            className="react-table__header"
-            role="row"
-          >
-            {headerGroup.headers.map((header) => {
-              const sorted = header.column.getIsSorted();
-              const pinnedStyle = getPinnedStyle(header.column);
-              if (header.column.id === "__rowNumber") {
-                return (
-                  <span
-                    key={header.column.id}
-                    role="columnheader"
-                    aria-label={t("table.rowNumber")}
-                    data-column-id={header.column.id}
-                    className={getCellClassName(header.column)}
-                    style={pinnedStyle}
-                  />
-                );
-              }
-              return (
-                <span
-                  key={header.column.id}
-                  role="columnheader"
-                  aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                  data-column-id={header.column.id}
-                  className={getCellClassName(header.column)}
-                  style={pinnedStyle}
-                >
-                  <button
-                    type="button"
-                    className="react-table__sort-button"
-                    title={header.column.id}
-                    onClick={handleSort}
-                  >
-                    <span>{header.column.id}</span>
-                    {sorted && <i aria-hidden="true">{sorted === "asc" ? "↑" : "↓"}</i>}
-                  </button>
-                  <table.Subscribe
-                    selector={(state) => ({
-                      isResizing: state.columnResizing.isResizingColumn === header.column.id,
-                      deltaOffset: state.columnResizing.deltaOffset ?? 0,
-                    })}
-                  >
-                    {({ isResizing, deltaOffset }) => (
-                      <span
-                        role="separator"
-                        className="react-table__resizer"
-                        aria-label={t("table.resizeColumn", { column: header.column.id })}
-                        aria-orientation="vertical"
-                        aria-valuemin={header.column.columnDef.minSize ?? 80}
-                        aria-valuemax={header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}
-                        aria-valuenow={Math.round(getColumnWidth(header.column))}
-                        title={t("table.resetColumnWidth")}
-                        data-column-id={header.column.id}
-                        data-resizing={isResizing ? "true" : undefined}
-                        style={isResizing ? { transform: `translateX(${deltaOffset}px)` } : undefined}
-                        onMouseDown={(event) => beginLibraryColumnResize(
-                          event,
-                          header.getResizeHandler(event.currentTarget.ownerDocument),
-                        )}
-                        onTouchStart={(event) => beginLibraryColumnResize(
-                          event,
-                          header.getResizeHandler(event.currentTarget.ownerDocument),
-                        )}
-                        onDoubleClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          captureResizeScroll();
-                          header.column.resetSize();
-                        }}
-                      />
-                    )}
-                  </table.Subscribe>
-                </span>
-              );
-            })}
-          </div>
-        ))}
-        <div className="react-table__body">
-          {renderedPageRows}
-        </div>
-      </div>
-      <nav className="react-table__pagination" aria-label={t("table.pagination")}>
-        <button
-          type="button"
-          disabled={pageIndex === 0}
-          onClick={() => showPage(Math.max(0, pageIndex - 1))}
-        >
-          {t("table.previousPage")}
-        </button>
-        <span>{t("table.pageStatus", { current: pageIndex + 1, total: pageCount })}</span>
-        <button
-          type="button"
-          disabled={pageIndex >= pageCount - 1}
-          onClick={() => showPage(Math.min(pageCount - 1, pageIndex + 1))}
-        >
-          {t("table.nextPage")}
-        </button>
-      </nav>
+      <DataGrid
+        className="react-table__grid"
+        aria-label={t("table.title")}
+        columns={gridColumns}
+        rows={gridRows}
+        rowKeyGetter={(row) => row.id}
+        columnWidths={gridColumnWidths}
+        onColumnWidthsChange={setGridColumnWidths}
+        sortColumns={gridSortColumns}
+        onSortColumnsChange={handleGridSortChange}
+        onColumnsReorder={handleGridColumnReorder}
+        onCellClick={({ row }) => onSelect(row.id)}
+        rowClass={(row) => row.id === selectedId ? "is-selected" : undefined}
+        rowHeight={34}
+        headerRowHeight={36}
+        defaultColumnOptions={{
+          minWidth: 80,
+          resizable: true,
+          sortable: true,
+          draggable: true,
+        }}
+      />
     </section>
   );
 }
