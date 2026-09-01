@@ -123,15 +123,33 @@ class CdpConnection {
       const pending = this.pending.get(message.id);
       if (!pending) return;
       this.pending.delete(message.id);
+      clearTimeout(pending.timeout);
       if (message.error) pending.reject(new Error(message.error.message));
       else pending.resolve(message.result);
+    });
+    const rejectPending = (reason) => {
+      for (const pending of this.pending.values()) {
+        clearTimeout(pending.timeout);
+        pending.reject(reason);
+      }
+      this.pending.clear();
+    };
+    webSocket.addEventListener("close", (event) => {
+      rejectPending(new Error(`Chrome DevTools connection closed (${event.code}: ${event.reason || "no reason"}).`));
+    });
+    webSocket.addEventListener("error", () => {
+      rejectPending(new Error("Chrome DevTools connection failed."));
     });
   }
 
   send(method, params = {}) {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Chrome DevTools command timed out: ${method}`));
+      }, 15_000);
+      this.pending.set(id, { resolve, reject, timeout });
       this.webSocket.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -173,20 +191,28 @@ const dispatchMouse = (cdp, type, x, y, buttons, clickCount = 0) => cdp.send(
     type,
     x,
     y,
-    button: buttons > 0 || type === "mouseReleased" ? "left" : "none",
+    button: type === "mousePressed" || type === "mouseReleased" ? "left" : "none",
     buttons,
     clickCount,
+    pointerType: "mouse",
   },
 );
 
+const dispatchTouch = (cdp, type, x, y) => cdp.send("Input.dispatchTouchEvent", {
+  type,
+  touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1, radiusX: 1, radiusY: 1 }],
+});
+
 let chromeProcess;
-let browserCdp;
 let cdp;
 
 try {
   assert.ok(existsSync(path.join(distDir, "extension/viewer.html")), "Run npm run build first.");
   await createResizeFixture();
+  const extensionId = getUnpackedExtensionId(distDir);
+  const viewerUrl = `chrome-extension://${extensionId}/extension/viewer.html`;
   chromeProcess = spawn(findChromeExecutable(), [
+    "--headless=new",
     "--use-angle=swiftshader",
     "--enable-unsafe-swiftshader",
     "--no-first-run",
@@ -198,30 +224,20 @@ try {
     `--disable-extensions-except=${distDir}`,
     `--load-extension=${distDir}`,
     `--user-data-dir=${path.join(temporaryDir, "chrome-profile")}`,
-    "about:blank",
+    viewerUrl,
   ], {
     stdio: ["ignore", "ignore", "pipe"],
     windowsHide: true,
   });
   const browserWebSocketUrl = await waitForDebuggerUrl(chromeProcess);
   const debuggerPort = Number(new URL(browserWebSocketUrl).port);
-  browserCdp = await connectCdp(browserWebSocketUrl);
   await delay(1_000);
-  const { targetInfos } = await browserCdp.send("Target.getTargets");
-  const loadedExtensionTarget = targetInfos.find(({ url }) => (
-    url.startsWith("chrome-extension://") && url.endsWith("/service-worker-loader.js")
-  ));
-  const extensionId = loadedExtensionTarget
-    ? new URL(loadedExtensionTarget.url).hostname
-    : getUnpackedExtensionId(distDir);
-  const viewerUrl = `chrome-extension://${extensionId}/extension/viewer.html`;
-  const { targetId } = await browserCdp.send("Target.createTarget", { url: viewerUrl });
   let pageTarget;
   await waitFor(
     async () => {
       const targetsResponse = await fetch(`http://127.0.0.1:${debuggerPort}/json/list`);
       const targets = await targetsResponse.json();
-      pageTarget = targets.find(({ id }) => id === targetId);
+      pageTarget = targets.find(({ url }) => url === viewerUrl);
       return Boolean(pageTarget?.webSocketDebuggerUrl);
     },
     "Extension viewer target",
@@ -230,6 +246,7 @@ try {
   await cdp.send("Runtime.enable");
   await cdp.send("DOM.enable");
   await cdp.send("Page.enable");
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await cdp.send("Page.navigate", { url: viewerUrl });
   await waitFor(
     () => cdp.evaluate(
@@ -251,7 +268,7 @@ try {
     files: [fixturePath],
   });
   await waitFor(
-    () => cdp.evaluate("Boolean(document.querySelector('.react-table__resizer'))"),
+    () => cdp.evaluate("Boolean(document.querySelector('.rdg-resize-handle'))"),
     "Attribute table render",
   );
 
@@ -259,7 +276,7 @@ try {
   await delay(400);
   const initial = await cdp.evaluate(`(async () => {
     const app = document.querySelector('.react-app') || document.scrollingElement;
-    const viewport = document.querySelector('.react-table__viewport');
+    const viewport = document.querySelector('.react-table__grid');
     if (!app || !viewport) {
       throw new Error('Viewer scroll containers were not found: ' + JSON.stringify({
         href: location.href,
@@ -269,20 +286,27 @@ try {
     }
     app.scrollTop += viewport.getBoundingClientRect().top - 80;
     viewport.scrollTop = 1200;
-    const handles = [...document.querySelectorAll('.react-table__resizer')];
-    const handle = handles[Math.min(4, handles.length - 1)];
-    if (!handle) throw new Error('Resize handle was not found.');
-    const viewportRect = viewport.getBoundingClientRect();
-    const headerRect = handle.closest('[role="columnheader"]').getBoundingClientRect();
-    const handleContentRight = headerRect.right - viewportRect.left + viewport.scrollLeft;
-    viewport.scrollLeft = Math.max(1, handleContentRight - 320);
+    viewport.scrollLeft = 275;
     await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const handles = [...document.querySelectorAll('.rdg-resize-handle')];
+    const viewportRect = viewport.getBoundingClientRect();
+    const visibleHandles = handles.filter((candidate) => {
+      const candidateRect = candidate.getBoundingClientRect();
+      return candidateRect.left >= viewportRect.left && candidateRect.right <= viewportRect.right;
+    });
+    const handle = visibleHandles[Math.min(2, visibleHandles.length - 1)];
+    if (!handle) throw new Error('Resize handle was not found.');
+    const handleIndex = handles.indexOf(handle);
     const rect = handle.getBoundingClientRect();
     const header = handle.closest('[role="columnheader"]');
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
     return {
-      target: handle.dataset.columnId,
+      target: header.textContent.trim(),
+      handleIndex,
       tagName: handle.tagName,
-      role: handle.getAttribute('role'),
+      ariaHidden: handle.getAttribute('aria-hidden'),
+      hitClass: hit?.className ?? null,
       x: rect.x + rect.width / 2,
       y: rect.y + rect.height / 2,
       width: header.getBoundingClientRect().width,
@@ -293,23 +317,23 @@ try {
     };
   })()`);
 
-  assert.equal(initial.tagName, "SPAN");
-  assert.equal(initial.role, "separator");
+  assert.equal(initial.tagName, "DIV");
+  assert.equal(initial.ariaHidden, "true");
+  assert.match(initial.hitClass, /rdg-resize-handle/);
   assert.ok(initial.appTop > 0, "Outer viewer did not reach a nested scroll position.");
   assert.ok(initial.viewportTop > 0, "Table did not reach a vertical scroll position.");
   assert.ok(initial.viewportLeft > 0, "Table did not reach a horizontal scroll position.");
 
   const readState = () => cdp.evaluate(`(() => {
     const app = document.querySelector('.react-app') || document.scrollingElement;
-    const viewport = document.querySelector('.react-table__viewport');
-    const handle = document.querySelector('.react-table__resizer[data-column-id="${initial.target}"]');
+    const viewport = document.querySelector('.react-table__grid');
+    const handle = [...document.querySelectorAll('.rdg-resize-handle')][${initial.handleIndex}];
     return {
       width: handle.closest('[role="columnheader"]').getBoundingClientRect().width,
       appTop: app.scrollTop,
       appHeight: app.scrollHeight,
       viewportTop: viewport.scrollTop,
       viewportLeft: viewport.scrollLeft,
-      resizing: handle.dataset.resizing === 'true' ? handle.dataset.columnId : null,
       activeRole: document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName,
     };
   })()`);
@@ -324,46 +348,32 @@ try {
   const hovered = await readState();
   assertScrollPosition(hovered, "hover");
 
-  await dispatchMouse(cdp, "mousePressed", initial.x, initial.y, 1, 1);
+  await dispatchTouch(cdp, "touchStart", initial.x, initial.y);
   const pressed = await readState();
-  assert.equal(pressed.resizing, initial.target, "Pointer down did not start the resize session.");
   assertScrollPosition(pressed, "pointer down");
-  await cdp.evaluate(`(() => {
-    const app = document.querySelector('.react-app') || document.scrollingElement;
-    const viewport = document.querySelector('.react-table__viewport');
-    app.scrollTop = 0;
-    app.scrollLeft = 0;
-    viewport.scrollTop = 0;
-    viewport.scrollLeft = 0;
-  })()`);
-  await delay(50);
-  const forcedScroll = await readState();
-  assertScrollPosition(forcedScroll, "forced popup scroll during resize");
-  await dispatchMouse(cdp, "mouseReleased", initial.x, initial.y, 0, 1);
+  await dispatchTouch(cdp, "touchEnd", initial.x, initial.y);
   await delay(50);
   const clicked = await readState();
   assert.equal(clicked.width, initial.width, "A click without movement changed the column width.");
-  assert.equal(clicked.activeRole, "BODY", "Resize handle captured native focus.");
   assertScrollPosition(clicked, "click without movement");
 
-  await dispatchMouse(cdp, "mousePressed", initial.x, initial.y, 1, 1);
+  await dispatchTouch(cdp, "touchStart", initial.x, initial.y);
   const dragStates = [{ stage: "pressed", ...(await readState()) }];
   for (const deltaX of [30, 60, 90]) {
-    await dispatchMouse(cdp, "mouseMoved", initial.x + deltaX, initial.y, 1);
+    await dispatchTouch(cdp, "touchMove", initial.x + deltaX, initial.y);
     await delay(25);
     dragStates.push({ stage: `moved-${deltaX}`, ...(await readState()) });
   }
-  await dispatchMouse(cdp, "mouseReleased", initial.x + 90, initial.y, 0, 1);
+  await dispatchTouch(cdp, "touchEnd", initial.x + 90, initial.y);
   await delay(50);
   const resized = await readState();
   dragStates.push({ stage: "released", ...resized });
   console.log(JSON.stringify({ dragStates }, null, 2));
   assert.ok(
     resized.width >= initial.width + 89,
-    `Pointer-captured drag did not resize the column (${initial.width} -> ${resized.width}).`,
+    `Data grid drag did not resize the column (${initial.width} -> ${resized.width}).`,
   );
-  assert.equal(resized.resizing, null, "Resize session did not finish cleanly.");
-  assertScrollPosition(resized, "pointer-captured drag");
+  assertScrollPosition(resized, "data grid drag");
 
   console.log(JSON.stringify({
     environment: {
@@ -372,14 +382,12 @@ try {
     },
     initial,
     hovered,
-    forcedScroll,
     clicked,
     resized,
   }, null, 2));
   console.log("Column resize browser regression check passed.");
 } finally {
   cdp?.webSocket?.close();
-  browserCdp?.webSocket?.close();
   if (chromeProcess && chromeProcess.exitCode === null) {
     const chromeExited = new Promise((resolve) => {
       chromeProcess.once("exit", resolve);

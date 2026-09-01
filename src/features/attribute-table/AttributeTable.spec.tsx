@@ -4,10 +4,7 @@ import { I18nextProvider } from "react-i18next";
 import { renderToStaticMarkup } from "react-dom/server";
 import { messages } from "../../locales/messages";
 import type { ColumnStat, FeatureCollectionGeometry } from "../../domain/types";
-import AttributeTable, {
-  restoreTableScrollPosition,
-  shouldContainTableWheel,
-} from "./AttributeTable";
+import AttributeTable from "./AttributeTable";
 
 const collection: FeatureCollectionGeometry = {
   type: "FeatureCollection",
@@ -34,38 +31,7 @@ const columns: ColumnStat[] = ["name", "score"].map((name) => ({
 }));
 
 describe("AttributeTable", () => {
-  it("contains only wheel input that would leave a vertical table boundary", () => {
-    const viewport = { clientHeight: 440, scrollHeight: 3_400 };
-
-    expect(shouldContainTableWheel({ ...viewport, scrollTop: 0, deltaY: -120 })).toBe(true);
-    expect(shouldContainTableWheel({ ...viewport, scrollTop: 0, deltaY: 120 })).toBe(false);
-    expect(shouldContainTableWheel({ ...viewport, scrollTop: 800, deltaY: -120 })).toBe(false);
-    expect(shouldContainTableWheel({ ...viewport, scrollTop: 800, deltaY: 120 })).toBe(false);
-    expect(shouldContainTableWheel({ ...viewport, scrollTop: 2_960, deltaY: 120 })).toBe(true);
-    expect(shouldContainTableWheel({ ...viewport, scrollTop: 2_960, deltaY: -120 })).toBe(false);
-    expect(shouldContainTableWheel({ ...viewport, scrollTop: 0, deltaY: 0 })).toBe(false);
-  });
-
-  it("restores both table and outer scroll positions after a column resize render", () => {
-    const viewport = { scrollTop: 0, scrollLeft: 0 };
-    const appScroller = { scrollTop: 0, scrollLeft: 0 };
-
-    restoreTableScrollPosition(
-      {
-        viewportTop: 1_200,
-        viewportLeft: 340,
-        appTop: 1_940,
-        appLeft: 0,
-      },
-      viewport,
-      appScroller,
-    );
-
-    expect(viewport).toEqual({ scrollTop: 1_200, scrollLeft: 340 });
-    expect(appScroller).toEqual({ scrollTop: 1_940, scrollLeft: 0 });
-  });
-
-  it("renders sortable column headers and keeps detailed filters collapsed", async () => {
+  it("renders the data grid column controls and keeps detailed filters collapsed", async () => {
     const i18n = createInstance();
     await i18n.init({
       lng: "en",
@@ -97,27 +63,19 @@ describe("AttributeTable", () => {
     expect(html).toContain("Show all");
     expect(html).toContain('type="checkbox" checked=""');
     expect(html).not.toContain("<details open");
-    expect(html).toContain('aria-sort="none"');
-    expect(html).toContain('title="name"');
-    expect(html).toContain('title="score"');
-    expect(html).toContain("Resize name column");
-    expect(html).toContain('role="separator"');
-    expect(html).toContain('aria-orientation="vertical"');
-    expect(html).toContain('aria-valuenow="108"');
-    expect(html).toContain("Double-click to reset width");
+    expect(html).toContain("rdg-resize-handle");
+    expect(html).toContain("rdg-cell-draggable");
     expect(html).toContain("Pin name column left");
     expect(html).toContain("Pin score column right");
     expect(html).toContain("Move name column");
     expect(html).toContain('aria-pressed="false"');
     expect(html).not.toContain("Sort column");
-    expect(html).toContain("Page 1 of 1");
     expect(html).toContain('disabled=""');
-    expect(html).toContain('--react-table-columns:54px 108px 108px');
-    expect(html.match(/data-column-id="name"/g)).toHaveLength(3);
-    expect(html).toContain('aria-valuemin="80"');
+    expect(html).toContain("grid-template-columns:54px 108px 108px");
+    expect(html).not.toContain("react-table__resizer");
   });
 
-  it("renders a bounded native row page instead of a virtualized body", async () => {
+  it("exposes every row to the virtualized data grid without pagination", async () => {
     const i18n = createInstance();
     await i18n.init({
       lng: "en",
@@ -147,11 +105,9 @@ describe("AttributeTable", () => {
       </I18nextProvider>,
     );
 
-    expect(html).toContain("Page 1 of 2");
-    expect(html).toContain("Previous");
-    expect(html).toContain("Next");
-    expect(html).toContain("Feature 100");
-    expect(html).not.toContain("Feature 101");
-    expect(html).not.toContain("Virtual scrolling");
+    expect(html).toContain('aria-rowcount="102"');
+    expect(html).toContain("repeat(101, 34px)");
+    expect(html).toContain("Feature 1");
+    expect(html).not.toContain("react-table__pagination");
   });
 });
