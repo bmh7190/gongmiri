@@ -1,10 +1,12 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -192,6 +194,13 @@ export default function AttributeTable({
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const pendingSortScrollRef = useRef<{
+    viewportTop: number;
+    viewportLeft: number;
+    appTop: number;
+    appLeft: number;
+    appScroller: HTMLElement | null;
+  } | null>(null);
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
@@ -230,6 +239,10 @@ export default function AttributeTable({
       },
     ),
     [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, sourceRows],
+  );
+  const filteredFeatureIds = useMemo(
+    () => filteredRows.map((row) => row.id),
+    [filteredRows],
   );
   const tableColumns = useMemo(() => {
     const stride = Math.max(1, Math.floor(sourceRows.length / WIDTH_SAMPLE_LIMIT));
@@ -333,8 +346,30 @@ export default function AttributeTable({
   }, [pageCount, pageIndex]);
 
   useEffect(() => {
-    onFilteredIdsChange?.(rows.map((row) => row.original.id));
-  }, [onFilteredIdsChange, rows]);
+    onFilteredIdsChange?.(filteredFeatureIds);
+  }, [filteredFeatureIds, onFilteredIdsChange]);
+
+  useLayoutEffect(() => {
+    const pending = pendingSortScrollRef.current;
+    if (!pending) return;
+    pendingSortScrollRef.current = null;
+
+    const restoreScroll = () => {
+      const viewport = viewportRef.current;
+      if (viewport) {
+        viewport.scrollTop = pending.viewportTop;
+        viewport.scrollLeft = pending.viewportLeft;
+      }
+      if (pending.appScroller) {
+        pending.appScroller.scrollTop = pending.appTop;
+        pending.appScroller.scrollLeft = pending.appLeft;
+      }
+    };
+
+    restoreScroll();
+    const frame = requestAnimationFrame(restoreScroll);
+    return () => cancelAnimationFrame(frame);
+  });
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -359,6 +394,24 @@ export default function AttributeTable({
   const showPage = (nextPage: number) => {
     setPageIndex(nextPage);
     viewportRef.current?.scrollTo({ top: 0 });
+  };
+
+  const handleSort = (
+    event: MouseEvent<HTMLButtonElement>,
+    toggleSorting: ((event: unknown) => void) | undefined,
+  ) => {
+    const viewport = viewportRef.current;
+    const appScroller = viewport?.closest<HTMLElement>(".react-app") ?? null;
+    if (viewport) {
+      pendingSortScrollRef.current = {
+        viewportTop: viewport.scrollTop,
+        viewportLeft: viewport.scrollLeft,
+        appTop: appScroller?.scrollTop ?? 0,
+        appLeft: appScroller?.scrollLeft ?? 0,
+        appScroller,
+      };
+    }
+    toggleSorting?.(event);
   };
 
   const handleRowKeyDown = (
@@ -542,7 +595,10 @@ export default function AttributeTable({
                     type="button"
                     className="react-table__sort-button"
                     title={header.column.id}
-                    onClick={header.column.getToggleSortingHandler()}
+                    onClick={(event) => handleSort(
+                      event,
+                      header.column.getToggleSortingHandler(),
+                    )}
                   >
                     <span>{header.column.id}</span>
                     {sorted && <i aria-hidden="true">{sorted === "asc" ? "↑" : "↓"}</i>}
