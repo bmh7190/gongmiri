@@ -47,7 +47,6 @@ export const prepareExportCollection = (
   fields: string[],
   targetProjection: string | null,
 ): FeatureCollectionGeometry => {
-  const included = new Set(fields);
   return {
     type: "FeatureCollection",
     features: collection.features.map((feature) => ({
@@ -56,7 +55,10 @@ export const prepareExportCollection = (
         ? transformGeometry(feature.geometry, targetProjection)
         : structuredClone(feature.geometry),
       properties: Object.fromEntries(
-        Object.entries(feature.properties ?? {}).filter(([name]) => included.has(name)),
+        fields.flatMap((name) => Object.prototype.hasOwnProperty.call(
+          feature.properties ?? {},
+          name,
+        ) ? [[name, feature.properties?.[name]]] : []),
       ),
     })),
   };
