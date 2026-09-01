@@ -247,6 +247,22 @@ describe("data exports", () => {
     expect(feature.geometry.coordinates[0]).toBeCloseTo(200_000, 1);
     expect(feature.geometry.coordinates[1]).toBeCloseTo(600_000, 1);
   });
+
+  it("exports properties in the current table column order", () => {
+    const source: FeatureCollectionGeometry = {
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        id: "feature-1",
+        geometry: { type: "Point", coordinates: [127, 38] },
+        properties: { name: "Seoul", category: "capital", score: 100 },
+      }],
+    };
+
+    const prepared = prepareExportCollection(source, ["score", "name"], null);
+    expect(Object.keys(prepared.features[0]?.properties ?? {})).toEqual(["score", "name"]);
+    expect(createCsv(prepared)).toContain("feature_id,score,name");
+  });
 });
 
 describe("download detection", () => {
