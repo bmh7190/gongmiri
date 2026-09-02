@@ -1,12 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { inspectZipEntries } from "../domain/inspect-zip";
-import { getColumnQualityIssues } from "../domain/column-quality";
-import {
-  exploreColumns,
-  type ColumnQualityFilter,
-  type ColumnSort,
-} from "../domain/column-explorer";
 import type {
   EncodingOption,
   FeatureCollectionGeometry,
@@ -34,7 +28,6 @@ import {
   buildPointSizeStops,
   DEFAULT_POINT_SIZE_RANGE,
 } from "../domain/visualization";
-import { selectExportCollection } from "../domain/export-data";
 import { getSridOption } from "../domain/srid";
 import { changeLocale, localeOptions, type AppLocale } from "./i18n";
 import { useParserWorker } from "./hooks/use-parser-worker";
@@ -45,6 +38,7 @@ type ResultPanel = "map" | "quality" | "table";
 type AppTheme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "gongmiri.theme";
+const COLUMN_QUALITY_PAGE_SIZE = 9;
 
 const getInitialTheme = (): AppTheme => {
   if (typeof window === "undefined") return "light";
@@ -80,21 +74,12 @@ export default function App() {
   const [requiresSrid, setRequiresSrid] = useState(false);
   const [parseMode, setParseMode] = useState<ParseMode>("full");
   const [featureStats, setFeatureStats] = useState({ total: 0 });
-  const [columnQuery, setColumnQuery] = useState("");
-  const [columnQualityFilter, setColumnQualityFilter] =
-    useState<ColumnQualityFilter>("all");
-  const [columnSort, setColumnSort] = useState<ColumnSort>("name");
+  const [columnQualityPage, setColumnQualityPage] = useState(1);
   const [activeResultPanel, setActiveResultPanel] = useState<ResultPanel>("map");
-  const [filteredFeatureIds, setFilteredFeatureIds] = useState<FeatureId[]>([]);
   const [visibleTableFields, setVisibleTableFields] = useState<string[]>([]);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const mapCollection = useMemo(
-    () => collection
-      ? selectExportCollection(collection, filteredFeatureIds)
-      : null,
-    [collection, filteredFeatureIds],
-  );
+  const mapCollection = collection;
   const [visualizationSettings, setVisualizationSettings] =
     useState<VisualizationSettings>(createDefaultVisualization);
   const sourceRef = useRef<{ buffer: ArrayBuffer; fileName: string; fileBytes: number } | null>(null);
@@ -134,12 +119,14 @@ export default function App() {
       ) ?? false,
     [mapCollection],
   );
-  const exploredColumns = useMemo(
-    () => result
-      ? exploreColumns(result.columns, columnQuery, columnQualityFilter, columnSort)
-      : [],
-    [columnQualityFilter, columnQuery, columnSort, result],
+  const columnQualityPageCount = Math.max(
+    1,
+    Math.ceil((result?.columns.length ?? 0) / COLUMN_QUALITY_PAGE_SIZE),
   );
+  const visibleQualityColumns = useMemo(() => {
+    const start = (columnQualityPage - 1) * COLUMN_QUALITY_PAGE_SIZE;
+    return result?.columns.slice(start, start + COLUMN_QUALITY_PAGE_SIZE) ?? [];
+  }, [columnQualityPage, result]);
   const sourceSrid = sridOverride ?? inspection?.detectedSridCode ?? null;
   const sourceProjection = useMemo(() => {
     if (sourceSrid === 4326) return null;
@@ -216,6 +203,7 @@ export default function App() {
       setCollection(null);
       setResult(null);
       setSelectedId(null);
+      setColumnQualityPage(1);
       try {
         const parsed = await parse(
           buffer,
@@ -229,7 +217,6 @@ export default function App() {
         setFeatureStats({ total: parsed.totalFeatures });
         setParseMode(parsed.mode);
         setCollection(parsed.collection);
-        setFilteredFeatureIds(parsed.collection.features.map((feature) => String(feature.id)));
         setSelectedId(parsed.collection.features[0]?.id?.toString() ?? null);
         setResult(parsed.result);
       } catch (parseError) {
@@ -262,11 +249,8 @@ export default function App() {
       setSridOverride(null);
       setRequiresSrid(false);
       setFeatureStats({ total: 0 });
-      setColumnQuery("");
-      setColumnQualityFilter("all");
-      setColumnSort("name");
+      setColumnQualityPage(1);
       setActiveResultPanel("map");
-      setFilteredFeatureIds([]);
       setVisibleTableFields([]);
       setIsExportOpen(false);
       setVisualizationSettings(createDefaultVisualization());
@@ -568,16 +552,18 @@ export default function App() {
                     selectedId={selectedId}
                     onSelect={setSelectedId}
                     visualization={visualization}
+                    toolbar={(
+                      <VisualizationControls
+                        columns={result.columns}
+                        settings={visualizationSettings}
+                        hasPoints={hasPoints}
+                        onChange={(change) =>
+                          setVisualizationSettings((current) => ({ ...current, ...change }))
+                        }
+                      />
+                    )}
                   />
                 </Suspense>
-                <VisualizationControls
-                  columns={result.columns}
-                  settings={visualizationSettings}
-                  hasPoints={hasPoints}
-                  onChange={(change) =>
-                    setVisualizationSettings((current) => ({ ...current, ...change }))
-                  }
-                />
               </section>
               <section
                 id="result-panel-quality"
@@ -586,53 +572,8 @@ export default function App() {
                 aria-labelledby="result-tab-quality"
               >
                 <h2>{t("summary.columnQuality")}</h2>
-                <div className="react-column-tools">
-                <label>
-                  <span>{t("summary.columnSearch")}</span>
-                  <input
-                    type="search"
-                    value={columnQuery}
-                    placeholder={t("summary.columnSearchPlaceholder")}
-                    onChange={(event) => setColumnQuery(event.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>{t("summary.qualityFilter")}</span>
-                  <select
-                    value={columnQualityFilter}
-                    onChange={(event) =>
-                      setColumnQualityFilter(event.target.value as ColumnQualityFilter)
-                    }
-                  >
-                    <option value="all">{t("summary.filter.all")}</option>
-                    <option value="issues">{t("summary.filter.issues")}</option>
-                    <option value="mostlyEmpty">{t("summary.warning.mostlyEmpty")}</option>
-                    <option value="singleValue">{t("summary.warning.singleValue")}</option>
-                    <option value="mixedType">{t("summary.warning.mixedType")}</option>
-                  </select>
-                </label>
-                <label>
-                  <span>{t("summary.columnSort")}</span>
-                  <select
-                    value={columnSort}
-                    onChange={(event) => setColumnSort(event.target.value as ColumnSort)}
-                  >
-                    <option value="name">{t("summary.sort.name")}</option>
-                    <option value="fillRate">{t("summary.sort.fillRate")}</option>
-                    <option value="empty">{t("summary.sort.empty")}</option>
-                    <option value="unique">{t("summary.sort.unique")}</option>
-                    <option value="type">{t("summary.sort.type")}</option>
-                  </select>
-                </label>
-                <p aria-live="polite">
-                  {t("summary.columnResultCount", {
-                    count: exploredColumns.length,
-                    total: result.columns.length,
-                  })}
-                </p>
-                </div>
                 <div className="react-columns">
-                  {exploredColumns.map((column) => (
+                  {visibleQualityColumns.map((column) => (
                   <article key={column.name}>
                     <div>
                       <strong>{column.name || t("summary.unnamed")}</strong>
@@ -659,18 +600,37 @@ export default function App() {
                             })}
                       </span>
                     </div>
-                    {getColumnQualityIssues(column).length > 0 && (
-                      <div className="react-column-warnings">
-                        {getColumnQualityIssues(column).map((issue) => (
-                          <span key={issue}>{t(`summary.warning.${issue}`)}</span>
-                        ))}
-                      </div>
-                    )}
                   </article>
                   ))}
                 </div>
-                {exploredColumns.length === 0 && (
+                {visibleQualityColumns.length === 0 && (
                   <p className="react-columns-empty">{t("summary.noColumns")}</p>
+                )}
+                {columnQualityPageCount > 1 && (
+                  <nav className="react-columns-pagination" aria-label={t("summary.pagination")}>
+                    <button
+                      type="button"
+                      disabled={columnQualityPage === 1}
+                      onClick={() => setColumnQualityPage((current) => Math.max(1, current - 1))}
+                    >
+                      {t("summary.previousPage")}
+                    </button>
+                    <span aria-live="polite">
+                      {t("summary.pageStatus", {
+                        current: columnQualityPage,
+                        total: columnQualityPageCount,
+                      })}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={columnQualityPage === columnQualityPageCount}
+                      onClick={() => setColumnQualityPage((current) => (
+                        Math.min(columnQualityPageCount, current + 1)
+                      ))}
+                    >
+                      {t("summary.nextPage")}
+                    </button>
+                  </nav>
                 )}
               </section>
               <section
@@ -686,7 +646,6 @@ export default function App() {
                       columns={result.columns}
                       selectedId={selectedId}
                       onSelect={setSelectedId}
-                      onFilteredIdsChange={setFilteredFeatureIds}
                       onVisibleColumnOrderChange={handleVisibleTableFields}
                       onExport={handleOpenExport}
                       exportOpen={isExportOpen}
@@ -710,8 +669,6 @@ export default function App() {
       {isExportOpen && collection && result && (
         <ExportDialog
           collection={collection}
-          selectedId={selectedId}
-          filteredIds={filteredFeatureIds}
           fileName={result.fileName}
           parseMode={parseMode}
           sourceProjection={sourceProjection}

@@ -69,10 +69,9 @@ describe("VisualizationControls", () => {
   it("presents statistical color choices as explicit view modes", async () => {
     const html = await renderControls();
 
-    expect(html).toContain("View options");
-    expect(html).toContain("<details");
-    expect(html).not.toContain("<details open");
-    expect(html).toContain("View mode");
+    expect(html).not.toContain("View options");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("<legend>View mode</legend>");
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('aria-pressed="false"');
     expect(html).toContain("By category");
@@ -91,10 +90,13 @@ describe("VisualizationControls", () => {
       numericField: "score",
     });
 
-    expect(categoryHtml).toContain("Data column");
+    expect(categoryHtml).not.toContain("<span>Data column</span>");
     expect(categoryHtml).toContain('option value="category" selected=""');
     expect(categoryHtml).not.toContain("Interval method");
-    expect(continuousHtml).toContain("Interval method");
+    expect(continuousHtml).not.toContain("<span>Data column</span>");
+    expect(continuousHtml).not.toContain("<span>Interval method</span>");
+    expect(continuousHtml).toContain('aria-label="Data column"');
+    expect(continuousHtml).toContain('aria-label="Interval method"');
     expect(continuousHtml).toContain('option value="score" selected=""');
   });
 

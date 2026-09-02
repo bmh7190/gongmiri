@@ -23,12 +23,5 @@
     "16": "extension/assets/icon-16.png",
     "48": "extension/assets/icon-48.png",
     "128": "extension/assets/icon-128.png"
-  },
-
-  "web_accessible_resources": [
-    {
-      "resources": ["extension/viewer.html"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

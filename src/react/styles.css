@@ -247,30 +247,7 @@ button, select, input { accent-color: var(--color-primary); }
   color: var(--color-text-muted);
   font-size: 12px;
 }
-.react-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.react-column-tools {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.react-column-tools label { display: grid; gap: 5px; }
-.react-column-tools label > span { color: var(--color-text-muted); font-size: 12px; font-weight: 700; }
-.react-column-tools input, .react-column-tools select {
-  min-width: 0;
-  min-height: 40px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  padding: 0 10px;
-  color: var(--color-text);
-  background: var(--color-surface);
-}
-.react-column-tools p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
+.react-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .react-columns-empty { margin: 12px 0; color: var(--color-text-muted); }
 .react-columns article {
   display: grid;
@@ -279,17 +256,31 @@ button, select, input { accent-color: var(--color-primary); }
   border-radius: var(--radius-md);
   padding: 12px;
 }
-.react-column-meta, .react-column-warnings { display: flex; flex-wrap: wrap; gap: 6px; }
-.react-column-meta { justify-content: flex-start !important; }
-.react-column-warnings { justify-content: flex-start !important; }
-.react-column-warnings span {
-  border-radius: 999px;
-  padding: 4px 7px;
-  color: var(--color-warning-text);
-  background: var(--color-warning-soft);
-  font-size: 10px;
-  font-weight: 700;
+.react-column-meta { display: flex; flex-wrap: wrap; justify-content: flex-start !important; gap: 6px; }
+.react-columns-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
 }
+.react-columns-pagination button {
+  min-height: 34px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 0 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font-weight: 700;
+  cursor: pointer;
+}
+.react-columns-pagination button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.react-columns-pagination button:disabled { cursor: default; opacity: .45; }
+.react-columns-pagination span { color: var(--color-text-muted); font-size: 12px; font-weight: 700; }
 
 @container viewer (max-width: 1000px) {
   .react-header { grid-template-columns: minmax(0, 1fr) auto; }
@@ -305,7 +296,7 @@ button, select, input { accent-color: var(--color-primary); }
   .react-header { grid-template-columns: 1fr; align-items: flex-start; }
   .react-header__actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .react-header__preferences { margin-left: 0; }
-  .react-grid, .react-columns, .react-column-tools { grid-template-columns: 1fr; }
+  .react-grid, .react-columns { grid-template-columns: 1fr; }
   .react-result-tabs {
     position: sticky;
     top: 8px;

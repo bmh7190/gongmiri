@@ -34,8 +34,6 @@ const renderDialog = async (initialFormat: "csv" | "geojson") => {
     <I18nextProvider i18n={i18n}>
       <ExportDialog
         collection={source}
-        selectedId="feature-1"
-        filteredIds={["feature-1"]}
         fileName="sample.zip"
         parseMode="full"
         sourceProjection="+proj=tmerc +lat_0=38 +lon_0=127"
@@ -56,6 +54,8 @@ describe("ExportDialog", () => {
     expect(html).toContain("UTF-8 with BOM");
     expect(html).toContain("Save CSV");
     expect(html).toContain("Included fields 2/2");
+    expect(html).not.toContain("Export scope");
+    expect(html).not.toContain("Selected features");
     expect(html).not.toContain("GeoJSON coordinates");
   });
 
