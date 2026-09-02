@@ -31,6 +31,7 @@ import {
 import { getSridOption } from "../domain/srid";
 import { changeLocale, localeOptions, type AppLocale } from "./i18n";
 import { useParserWorker } from "./hooks/use-parser-worker";
+import "pretendard/dist/web/variable/pretendardvariable.css";
 import "./styles.css";
 
 const MapViewer = lazy(() => import("../features/map-viewer/MapViewer"));
