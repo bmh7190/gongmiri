@@ -37,9 +37,7 @@ import type {
 } from "../../domain/types";
 import {
   compareAttributeValues,
-  exploreAttributeRows,
   type AttributeRow,
-  type EmptyValueFilter,
 } from "../../domain/attribute-rows";
 import "./attribute-table.css";
 
@@ -90,6 +88,7 @@ const getWheelPixels = (event: WheelEvent, grid: HTMLDivElement) => {
 
 const useContainedGridInteraction = () => {
   const gridRef = useRef<DataGridHandle>(null);
+  const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const grid = gridRef.current?.element;
@@ -129,7 +128,41 @@ const useContainedGridInteraction = () => {
     };
   }, []);
 
-  return gridRef;
+  useEffect(() => {
+    const section = sectionRef.current;
+    const outer = section?.closest<HTMLElement>(".react-app");
+    if (!section || !outer) return;
+
+    let restoreFrame = 0;
+    const preserveOuterScroll = () => {
+      const top = outer.scrollTop;
+      const left = outer.scrollLeft;
+      const restore = () => {
+        outer.scrollTop = top;
+        outer.scrollLeft = left;
+      };
+      window.cancelAnimationFrame(restoreFrame);
+      queueMicrotask(restore);
+      restoreFrame = window.requestAnimationFrame(() => {
+        restore();
+        restoreFrame = window.requestAnimationFrame(restore);
+      });
+    };
+
+    section.addEventListener("pointerdown", preserveOuterScroll, true);
+    section.addEventListener("mousedown", preserveOuterScroll, true);
+    section.addEventListener("click", preserveOuterScroll, true);
+    section.addEventListener("change", preserveOuterScroll, true);
+    return () => {
+      window.cancelAnimationFrame(restoreFrame);
+      section.removeEventListener("pointerdown", preserveOuterScroll, true);
+      section.removeEventListener("mousedown", preserveOuterScroll, true);
+      section.removeEventListener("click", preserveOuterScroll, true);
+      section.removeEventListener("change", preserveOuterScroll, true);
+    };
+  }, []);
+
+  return { gridRef, sectionRef };
 };
 
 type SortableColumnOptionProps = {
@@ -214,7 +247,6 @@ type AttributeTableProps = {
   columns: ColumnStat[];
   selectedId: FeatureId | null;
   onSelect: (id: FeatureId) => void;
-  onFilteredIdsChange?: (ids: FeatureId[]) => void;
   onVisibleColumnOrderChange?: (columnIds: string[]) => void;
   onExport?: (trigger: HTMLButtonElement) => void;
   exportOpen?: boolean;
@@ -248,19 +280,12 @@ export default function AttributeTable({
   columns,
   selectedId,
   onSelect,
-  onFilteredIdsChange,
   onVisibleColumnOrderChange,
   onExport,
   exportOpen = false,
 }: AttributeTableProps) {
-  const { t, i18n } = useTranslation();
-  const gridRef = useContainedGridInteraction();
-  const [query, setQuery] = useState("");
-  const [searchColumn, setSearchColumn] = useState("");
-  const [filterColumn, setFilterColumn] = useState("");
-  const [emptyFilter, setEmptyFilter] = useState<EmptyValueFilter>("all");
-  const [minimum, setMinimum] = useState("");
-  const [maximum, setMaximum] = useState("");
+  const { t } = useTranslation();
+  const { gridRef, sectionRef } = useContainedGridInteraction();
 
   const sourceRows = useMemo(
     () =>
@@ -285,26 +310,6 @@ export default function AttributeTable({
   const resolvedManagedColumns = managedColumns.datasetKey === datasetColumnKey
     ? managedColumns
     : createManagedColumnState(datasetColumnKey, columnOrder);
-  const filteredRows = useMemo(
-    () => exploreAttributeRows(
-      sourceRows,
-      query,
-      searchColumn || null,
-      null,
-      "asc",
-      {
-        column: filterColumn || null,
-        empty: emptyFilter,
-        min: minimum === "" ? null : Number(minimum),
-        max: maximum === "" ? null : Number(maximum),
-      },
-    ),
-    [emptyFilter, filterColumn, maximum, minimum, query, searchColumn, sourceRows],
-  );
-  const filteredFeatureIds = useMemo(
-    () => filteredRows.map((row) => row.id),
-    [filteredRows],
-  );
   const estimatedColumnWidths = useMemo(() => {
     const stride = Math.max(1, Math.floor(sourceRows.length / WIDTH_SAMPLE_LIMIT));
     const sample = sourceRows
@@ -317,13 +322,13 @@ export default function AttributeTable({
   }, [columnOrder, sourceRows]);
   const sortedRows = useMemo(() => {
     const sorting = gridSortColumns.at(-1);
-    if (!sorting) return filteredRows;
+    if (!sorting) return sourceRows;
     const direction = sorting.direction === "DESC" ? -1 : 1;
-    return [...filteredRows].sort((left, right) => direction * compareAttributeValues(
+    return [...sourceRows].sort((left, right) => direction * compareAttributeValues(
       left.properties[sorting.columnKey],
       right.properties[sorting.columnKey],
     ));
-  }, [filteredRows, gridSortColumns]);
+  }, [gridSortColumns, sourceRows]);
   const hiddenColumnSet = useMemo(
     () => new Set(resolvedManagedColumns.hidden),
     [resolvedManagedColumns.hidden],
@@ -404,10 +409,6 @@ export default function AttributeTable({
   }, [collection, columnOrder, datasetColumnKey]);
 
   useEffect(() => {
-    onFilteredIdsChange?.(filteredFeatureIds);
-  }, [filteredFeatureIds, onFilteredIdsChange]);
-
-  useEffect(() => {
     onVisibleColumnOrderChange?.(visibleDataColumnIds);
   }, [onVisibleColumnOrderChange, visibleDataColumnOrderKey]);
 
@@ -465,17 +466,10 @@ export default function AttributeTable({
   );
 
   return (
-    <section className="react-table" aria-labelledby="attribute-table-title">
+    <section ref={sectionRef} className="react-table" aria-labelledby="attribute-table-title">
       <div className="react-table__title">
         <div>
           <h2 id="attribute-table-title">{t("table.title")}</h2>
-          <p>
-            {t("table.filteredRowCount", {
-              count: sortedRows.length,
-              filtered: sortedRows.length.toLocaleString(i18n.language),
-              total: sourceRows.length.toLocaleString(i18n.language),
-            })}
-          </p>
         </div>
         <div className="react-table__title-actions">
           {onExport && (
@@ -540,67 +534,6 @@ export default function AttributeTable({
         </div>
       </div>
 
-      <div className="react-table__tools">
-        <div className="react-table__tool-row react-table__tool-row--primary">
-          <label>
-            <span>{t("table.search")}</span>
-            <input
-              type="search"
-              value={query}
-              placeholder={t("table.searchPlaceholder")}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>{t("table.searchColumn")}</span>
-            <select value={searchColumn} onChange={(event) => setSearchColumn(event.target.value)}>
-              <option value="">{t("table.allColumns")}</option>
-              {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
-            </select>
-          </label>
-        </div>
-        <details className={`react-table__filters${filterColumn ? " is-active" : ""}`}>
-          <summary>{t("table.filters")}</summary>
-          <div className="react-table__tool-row react-table__tool-row--filters">
-            <label>
-              <span>{t("table.filterColumn")}</span>
-              <select
-                value={filterColumn}
-                onChange={(event) => {
-                  setFilterColumn(event.target.value);
-                  setEmptyFilter("all");
-                  setMinimum("");
-                  setMaximum("");
-                }}
-              >
-                <option value="">{t("table.noFilter")}</option>
-                {columnOrder.map((column) => <option key={column} value={column}>{column}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>{t("table.emptyFilter")}</span>
-              <select
-                value={emptyFilter}
-                disabled={!filterColumn}
-                onChange={(event) => setEmptyFilter(event.target.value as EmptyValueFilter)}
-              >
-                <option value="all">{t("table.emptyAll")}</option>
-                <option value="empty">{t("table.emptyOnly")}</option>
-                <option value="filled">{t("table.filledOnly")}</option>
-              </select>
-            </label>
-            <label>
-              <span>{t("table.minimum")}</span>
-              <input type="number" value={minimum} disabled={!filterColumn} onChange={(event) => setMinimum(event.target.value)} />
-            </label>
-            <label>
-              <span>{t("table.maximum")}</span>
-              <input type="number" value={maximum} disabled={!filterColumn} onChange={(event) => setMaximum(event.target.value)} />
-            </label>
-          </div>
-        </details>
-      </div>
-
       <DataGrid
         ref={gridRef}
         className="react-table__grid"
@@ -611,6 +544,7 @@ export default function AttributeTable({
         sortColumns={gridSortColumns}
         onSortColumnsChange={handleGridSortChange}
         onColumnsReorder={handleGridColumnReorder}
+        onCellMouseDown={(_args, event) => event.preventGridDefault()}
         onCellClick={handleGridCellClick}
         rowClass={getGridRowClass}
         rowHeight={34}

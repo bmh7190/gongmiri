@@ -316,6 +316,32 @@ try {
     "Attribute table render",
   );
 
+  const qualityPageOne = await cdp.evaluate(`(() => {
+    const grid = document.querySelector('.react-columns');
+    const pagination = document.querySelector('.react-columns-pagination');
+    return {
+      cardCount: grid?.querySelectorAll(':scope > article').length ?? 0,
+      gridColumnCount: grid
+        ? getComputedStyle(grid).gridTemplateColumns.trim().split(/\\s+/).filter(Boolean).length
+        : 0,
+      hasPagination: Boolean(pagination),
+    };
+  })()`);
+  assert.equal(qualityPageOne.cardCount, 9, "Column quality page should render nine cards.");
+  assert.equal(qualityPageOne.gridColumnCount, 3, "Column quality cards should use three columns.");
+  assert.equal(qualityPageOne.hasPagination, true, "Column quality pagination was not rendered.");
+  await cdp.evaluate(`document.querySelector('.react-columns-pagination button:last-child')?.click()`);
+  await delay(100);
+  const qualityPageTwoCount = await cdp.evaluate(
+    `document.querySelectorAll('.react-columns > article').length`,
+  );
+  assert.ok(
+    qualityPageTwoCount > 0 && qualityPageTwoCount < 9,
+    "Column quality second page should render only the remaining cards.",
+  );
+  await cdp.evaluate(`document.querySelector('.react-columns-pagination button:first-child')?.click()`);
+  await delay(100);
+
   await cdp.evaluate("document.querySelector('#result-tab-table')?.click()");
   await delay(400);
   const initial = await cdp.evaluate(`(async () => {
@@ -353,6 +379,7 @@ try {
     return {
       target: header.textContent.trim(),
       resizeHandleCount: document.querySelectorAll('.react-table__resize-handle, .rdg-resize-handle').length,
+      filterControlCount: document.querySelectorAll('.react-table__tools').length,
       boundaryX: headerRect.right - 1,
       boundaryY: headerRect.y + headerRect.height / 2,
       viewportX: viewportRect.x + viewportRect.width / 2,
@@ -378,6 +405,7 @@ try {
   })()`);
 
   assert.equal(initial.resizeHandleCount, 0, "Column resize handles should not be rendered.");
+  assert.equal(initial.filterControlCount, 0, "Attribute table filters should not be rendered.");
   assert.equal(initial.visibleResultPanels, 3, "The all-in-one result layout changed.");
   assert.ok(initial.appTop > 0, "Outer viewer did not reach a nested scroll position.");
   if (useShortTable) {
@@ -421,6 +449,25 @@ try {
     assert.equal(actual.viewportTop, initial.viewportTop, `${stage}: vertical table scroll moved.`);
     assert.equal(actual.viewportLeft, initial.viewportLeft, `${stage}: horizontal table scroll moved.`);
   };
+  const assertInteractionPosition = (actual, before, stage) => {
+    assert.equal(actual.innerWidth, before.innerWidth, `${stage}: popup width changed.`);
+    assert.equal(actual.innerHeight, before.innerHeight, `${stage}: popup height changed.`);
+    assert.equal(actual.rootTop, before.rootTop, `${stage}: root document scroll moved.`);
+    assert.equal(actual.appTop, before.appTop, `${stage}: outer scroll moved.`);
+    assert.equal(actual.viewportTop, before.viewportTop, `${stage}: vertical table scroll moved.`);
+    assert.equal(actual.viewportLeft, before.viewportLeft, `${stage}: horizontal table scroll moved.`);
+  };
+  const positionTarget = async (selector) => cdp.evaluate(`(async () => {
+    const app = document.querySelector('.react-app') || document.scrollingElement;
+    const target = document.querySelector(${JSON.stringify(selector)});
+    if (!target) throw new Error('Interaction target was not found: ${selector}');
+    const initialRect = target.getBoundingClientRect();
+    app.scrollTop += initialRect.top - 100;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const rect = target.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  })()`);
 
   const trackpadStates = [];
   for (let index = 0; index < 12; index += 1) {
@@ -535,6 +582,49 @@ try {
   const hovered = await readState();
   assertScrollPosition(hovered, "column boundary hover");
 
+  const exportUi = await cdp.evaluate(`(() => ({
+    selectionCheckboxCount: document.querySelectorAll('.react-table__grid input[type="checkbox"]').length,
+    hasSelectionCount: Boolean(document.querySelector('.react-table__selection-count')),
+  }))()`);
+  assert.equal(exportUi.selectionCheckboxCount, 0, "Deferred export selection checkboxes returned.");
+  assert.equal(exportUi.hasSelectionCount, false, "Deferred export selection count returned.");
+
+  const exportButtonTarget = await positionTarget('.react-table__export-button');
+  const exportDialogBefore = await readState();
+  await dispatchMouse(cdp, "mouseMoved", exportButtonTarget.x, exportButtonTarget.y, 0);
+  await dispatchMouse(cdp, "mousePressed", exportButtonTarget.x, exportButtonTarget.y, 1, 1);
+  await dispatchMouse(cdp, "mouseReleased", exportButtonTarget.x, exportButtonTarget.y, 0, 1);
+  await delay(100);
+  const exportDialogOpened = await readState();
+  assertInteractionPosition(exportDialogOpened, exportDialogBefore, "open export dialog");
+  const exportDialogState = await cdp.evaluate(`(() => ({
+    dialogOpen: Boolean(document.querySelector('.react-export-dialog[open]')),
+    scopeSelectCount: document.querySelectorAll('.react-export-dialog__setting select').length,
+    selectedOptionCount: document.querySelectorAll('.react-export-dialog option[value="selected"]').length,
+  }))()`);
+  assert.equal(exportDialogState.dialogOpen, true, "Export dialog did not open.");
+  assert.equal(exportDialogState.scopeSelectCount, 0, "Deferred export scope control returned.");
+  assert.equal(exportDialogState.selectedOptionCount, 0, "Deferred selected export option returned.");
+  await cdp.evaluate(`document.querySelector('.react-export-dialog__close')?.click()`);
+  await delay(100);
+
+  const columnMenuTarget = await positionTarget('.react-table__column-manager > summary');
+  const columnMenuBefore = await readState();
+  await dispatchMouse(cdp, "mouseMoved", columnMenuTarget.x, columnMenuTarget.y, 0);
+  await dispatchMouse(cdp, "mousePressed", columnMenuTarget.x, columnMenuTarget.y, 1, 1);
+  await dispatchMouse(cdp, "mouseReleased", columnMenuTarget.x, columnMenuTarget.y, 0, 1);
+  await delay(100);
+  const columnMenuOpened = await readState();
+  assertInteractionPosition(columnMenuOpened, columnMenuBefore, "column menu open");
+  const showAllTarget = await positionTarget('.react-table__column-menu button');
+  const showAllBefore = await readState();
+  await dispatchMouse(cdp, "mouseMoved", showAllTarget.x, showAllTarget.y, 0);
+  await dispatchMouse(cdp, "mousePressed", showAllTarget.x, showAllTarget.y, 1, 1);
+  await dispatchMouse(cdp, "mouseReleased", showAllTarget.x, showAllTarget.y, 0, 1);
+  await delay(100);
+  const showAllClicked = await readState();
+  assertInteractionPosition(showAllClicked, showAllBefore, "column menu action");
+
   console.log(JSON.stringify({
     environment: {
       extensionId,
@@ -551,6 +641,11 @@ try {
     interactionStates,
     scrollIntoViewCalls,
     hovered,
+    exportUi,
+    exportDialogOpened,
+    exportDialogState,
+    columnMenuOpened,
+    showAllClicked,
   }, null, 2));
   console.log("Popup table scroll regression check passed.");
 } finally {

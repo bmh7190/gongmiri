@@ -31,7 +31,7 @@ const columns: ColumnStat[] = ["name", "score"].map((name) => ({
 }));
 
 describe("AttributeTable", () => {
-  it("renders the data grid column controls and keeps detailed filters collapsed", async () => {
+  it("renders the data grid column controls without exploration filters", async () => {
     const i18n = createInstance();
     await i18n.init({
       lng: "en",
@@ -53,8 +53,17 @@ describe("AttributeTable", () => {
       </I18nextProvider>,
     );
 
-    expect(html).toContain("Detailed filters");
+    expect(html).not.toContain("Filter column");
+    expect(html).not.toContain("Empty values");
+    expect(html).not.toContain("Minimum");
+    expect(html).not.toContain("Maximum");
+    expect(html).not.toContain("react-table__tools");
+    expect(html).not.toContain("Search values");
+    expect(html).not.toContain("Search column");
+    expect(html).not.toContain('type="search"');
     expect(html).toContain("Columns 2/2");
+    expect(html).not.toContain("selected for export");
+    expect(html).not.toContain("features for export");
     expect(html).toContain('aria-label="Export"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-controls="export-dialog"');
@@ -70,7 +79,6 @@ describe("AttributeTable", () => {
     expect(html).toContain("Move name column");
     expect(html).toContain('aria-pressed="false"');
     expect(html).not.toContain("Sort column");
-    expect(html).toContain('disabled=""');
     expect(html).toContain("grid-template-columns:54px 108px 108px");
     expect(html).not.toContain("react-table__resizer");
   });

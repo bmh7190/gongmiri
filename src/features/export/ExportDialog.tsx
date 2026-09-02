@@ -9,20 +9,14 @@ import {
 import { useTranslation } from "react-i18next";
 import type {
   FeatureCollectionGeometry,
-  FeatureId,
   ParseMode,
 } from "../../domain/types";
-import { selectExportCollection } from "../../domain/export-data";
 import type { ExportFormat } from "../../domain/export-protocol";
 import { useExportWorker } from "./use-export-worker";
 import "./export-dialog.css";
 
-type ExportScope = "all" | "selected" | "filtered";
-
 type ExportDialogProps = {
   collection: FeatureCollectionGeometry;
-  selectedId: FeatureId | null;
-  filteredIds: FeatureId[];
   fileName: string;
   parseMode: ParseMode;
   sourceProjection: string | null;
@@ -43,8 +37,6 @@ const downloadBytes = (content: ArrayBuffer, fileName: string, mime: string) => 
 
 export default function ExportDialog({
   collection,
-  selectedId,
-  filteredIds,
   fileName,
   parseMode,
   sourceProjection,
@@ -57,7 +49,6 @@ export default function ExportDialog({
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const { exportData, isExporting, cancelExport } = useExportWorker();
   const [format, setFormat] = useState<ExportFormat>(initialFormat);
-  const [scope, setScope] = useState<ExportScope>("all");
   const [coordinateTarget, setCoordinateTarget] = useState<"wgs84" | "source">("wgs84");
   const [fieldQuery, setFieldQuery] = useState("");
   const [exportError, setExportError] = useState(false);
@@ -84,18 +75,9 @@ export default function ExportDialog({
       field.toLocaleLowerCase(i18n.language).includes(normalized)
     );
   }, [fieldQuery, i18n.language, orderedFields]);
-  const scoped = useMemo(() => {
-    if (scope === "selected") {
-      return selectExportCollection(collection, selectedId ? [selectedId] : []);
-    }
-    if (scope === "filtered") {
-      return selectExportCollection(collection, filteredIds);
-    }
-    return collection;
-  }, [collection, filteredIds, scope, selectedId]);
   const baseName = fileName.replace(/\.zip$/i, "") || "gongmiri";
-  const outputFileName = `${baseName}-${scope}.${format}`;
-  const disabled = scoped.features.length === 0 || selectedFields.length === 0;
+  const outputFileName = `${baseName}-all.${format}`;
+  const disabled = collection.features.length === 0 || selectedFields.length === 0;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -130,7 +112,7 @@ export default function ExportDialog({
     setExportError(false);
     try {
       const buffer = await exportData({
-        collection: scoped,
+        collection,
         fields: selectedFields,
         targetProjection: format === "geojson" && coordinateTarget === "source"
           ? sourceProjection
@@ -173,7 +155,7 @@ export default function ExportDialog({
         <header className="react-export-dialog__header">
           <div>
             <h2 id="export-dialog-title">{t("export.title")}</h2>
-            <p>{t("export.count", { count: scoped.features.length.toLocaleString(i18n.language) })}</p>
+            <p>{t("export.count", { count: collection.features.length.toLocaleString(i18n.language) })}</p>
           </div>
           <button
             type="button"
@@ -205,15 +187,6 @@ export default function ExportDialog({
           <p className="react-export-dialog__description">
             {t(format === "csv" ? "export.csvDescription" : "export.geojsonDescription")}
           </p>
-
-          <label className="react-export-dialog__setting">
-            <span>{t("export.scope")}</span>
-            <select value={scope} onChange={(event) => setScope(event.target.value as ExportScope)}>
-              <option value="all">{t("export.all")}</option>
-              <option value="selected" disabled={!selectedId}>{t("export.selected")}</option>
-              <option value="filtered">{t("export.filtered")}</option>
-            </select>
-          </label>
 
           {format === "geojson" ? (
             <label className="react-export-dialog__setting">

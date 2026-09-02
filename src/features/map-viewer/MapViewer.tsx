@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import type { ReactNode } from "react";
 import type {
   FeatureCollectionGeometry,
   FeatureId,
@@ -13,11 +14,12 @@ type MapViewerProps = {
   selectedId: FeatureId | null;
   onSelect: (id: FeatureId) => void;
   visualization: VisualizationConfig;
+  toolbar?: ReactNode;
 };
 
 export default function MapViewer(props: MapViewerProps) {
   const { t } = useTranslation();
-  const { containerRef, ready, error } = useMapLibre({
+  const { containerRef, error } = useMapLibre({
     ...props,
     popupTitle: t("map.properties"),
   });
@@ -28,12 +30,10 @@ export default function MapViewer(props: MapViewerProps) {
       <div className="react-map__header">
         <div>
           <h2 id="react-map-title">{t("map.title")}</h2>
-          <p>{t(hasFeatures ? "map.help" : "map.empty")}</p>
+          {!hasFeatures && <p>{t("map.empty")}</p>}
         </div>
-        <span className={`react-map__status${ready ? " is-ready" : ""}`}>
-          {t(ready ? "map.ready" : "map.loading")}
-        </span>
       </div>
+      {props.toolbar}
       <div className="react-map__canvas">
         <div ref={containerRef} className="react-map__container" />
         {!hasFeatures && <div className="react-map__empty">{t("map.empty")}</div>}

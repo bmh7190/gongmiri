@@ -129,60 +129,6 @@
 }
 .react-table__pin-actions button:hover { border-color: var(--color-border); background: var(--color-surface); }
 .react-table__pin-actions button.is-active { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); }
-.react-table__tools { display: grid; gap: 10px; }
-.react-table__tool-row { display: grid; align-items: end; gap: 10px; }
-.react-table__tool-row--primary { grid-template-columns: minmax(210px, 1.6fr) minmax(150px, .7fr); }
-.react-table__tool-row--filters { grid-template-columns: minmax(150px, 1.2fr) minmax(125px, 1fr) minmax(90px, .7fr) minmax(90px, .7fr); }
-.react-table__tools label { display: grid; gap: 5px; min-width: 0; }
-.react-table__tools label > span { color: var(--color-text-muted); font-size: 11px; font-weight: 700; }
-.react-table__tools input, .react-table__tools select, .react-table__tools button {
-  min-width: 0;
-  min-height: 40px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 9px;
-  padding: 0 10px;
-  color: var(--color-text);
-  background: var(--color-surface);
-}
-.react-table__tools button { cursor: pointer; white-space: nowrap; }
-.react-table__filters {
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-surface-subtle);
-}
-.react-table__filters summary {
-  display: flex;
-  min-height: 38px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  list-style: none;
-}
-.react-table__filters summary::-webkit-details-marker { display: none; }
-.react-table__filters summary::before {
-  color: var(--color-text-muted);
-  content: "›";
-  font-size: 17px;
-  line-height: 1;
-  transform-origin: center;
-  transition: transform 120ms ease;
-}
-.react-table__filters[open] summary::before { transform: rotate(90deg); }
-.react-table__filters.is-active summary::after {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  content: "";
-}
-.react-table__filters[open] { padding-bottom: 12px; }
-.react-table__filters[open] summary { margin-bottom: 10px; border-bottom: 1px solid var(--color-border); }
-.react-table__filters .react-table__tool-row { padding: 0 12px; }
 .react-table__grid {
   --rdg-selection-color: var(--color-primary);
   --rdg-color: var(--color-text);
@@ -215,8 +161,5 @@
   box-shadow: inset 3px 0 var(--color-primary);
 }
 @media (max-width: 760px) {
-  .react-table__tool-row--primary,
-  .react-table__tool-row--filters { grid-template-columns: 1fr 1fr; }
-  .react-table__tool-row--primary label:first-child { grid-column: 1 / -1; }
   .react-table__grid { height: 360px; }
 }

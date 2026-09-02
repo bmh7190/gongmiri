@@ -24,17 +24,12 @@ export default function VisualizationControls({
   const viewModes = ["default", "category", "continuous"] as const;
 
   return (
-    <section className="visualization-controls" aria-label={t("visualization.title")}>
-      <details className="visualization-controls__disclosure">
-        <summary>
-          <span>{t("visualization.title")}</span>
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="m5 7.5 5 5 5-5" />
-          </svg>
-        </summary>
-        <div className="visualization-controls__body">
-        <fieldset className="visualization-controls__group visualization-controls__mode-group">
-          <legend>{t("visualization.mode")}</legend>
+    <section className="visualization-controls" aria-label={t("visualization.mode")}>
+      <div className="visualization-controls__body">
+        <fieldset
+          className="visualization-controls__group visualization-controls__mode-group"
+          aria-label={t("visualization.mode")}
+        >
           <div className="visualization-controls__modes">
             {viewModes.map((mode) => (
               <button
@@ -58,9 +53,9 @@ export default function VisualizationControls({
         </fieldset>
 
         {settings.colorMode === "category" && (
-          <label className="visualization-controls__field">
-            <span>{t("visualization.field")}</span>
+          <div className="visualization-controls__field">
             <select
+              aria-label={t("visualization.field")}
               value={settings.categoryField ?? ""}
               onChange={(event) => onChange({ categoryField: event.target.value || null })}
             >
@@ -69,13 +64,13 @@ export default function VisualizationControls({
                 <option key={column.name} value={column.name}>{column.name}</option>
               ))}
             </select>
-          </label>
+          </div>
         )}
         {settings.colorMode === "continuous" && (
           <div className="visualization-controls__conditional">
             <label className="visualization-controls__field">
-              <span>{t("visualization.numericField")}</span>
               <select
+                aria-label={t("visualization.numericField")}
                 value={settings.numericField ?? ""}
                 onChange={(event) => onChange({ numericField: event.target.value || null })}
               >
@@ -86,8 +81,8 @@ export default function VisualizationControls({
               </select>
             </label>
             <label className="visualization-controls__field">
-              <span>{t("visualization.scale")}</span>
               <select
+                aria-label={t("visualization.scale")}
                 value={settings.numericScale}
                 onChange={(event) =>
                   onChange({
@@ -134,8 +129,7 @@ export default function VisualizationControls({
             </div>
           </fieldset>
         )}
-        </div>
-      </details>
+      </div>
     </section>
   );
 }
