@@ -9,12 +9,12 @@
 
 ## 상세 설명
 
-공미리는 `.shp`, `.dbf`, `.shx`가 포함된 Shapefile ZIP을 브라우저 안에서 분석하는 전체 화면 뷰어입니다.
+공미리는 `.shp`, `.dbf`, `.shx`가 포함된 Shapefile ZIP을 브라우저 안에서 분석하는 Chrome 팝업 뷰어입니다.
 
 - 지도에서 Point, LineString, Polygon, MultiPolygon 분포 확인
 - DBF 컬럼의 채움률, NULL, 고유값, 혼합 타입 품질 확인
-- 속성 검색·정렬·NULL·숫자 범위 필터와 지도 연동
-- 전체, 선택, 필터 결과를 GeoJSON 또는 UTF-8 CSV로 저장
+- 속성 정렬·컬럼 표시·고정·순서 변경과 지도 연동
+- 전체 결과에서 필요한 컬럼을 골라 GeoJSON 또는 UTF-8 CSV로 저장
 - WGS84 또는 감지한 원본 좌표계로 GeoJSON 저장
 - UTF-8, CP949, EUC-KR 및 주요 국내 좌표계 지원
 - 대용량 데이터의 자동 Quick 미리보기와 수동 Full 전환
@@ -27,7 +27,7 @@
 - Name: Gongmiri — Shapefile ZIP Preview
 - Short description: Inspect Shapefile ZIP maps, attributes, and data quality locally in Chrome without uploading datasets.
 
-Gongmiri is a full-page Chrome viewer for Shapefile ZIP archives. Explore geometry on a map, review DBF column quality, filter and synchronize table results with the map, and save all, selected, or filtered results as GeoJSON or UTF-8 CSV. Large datasets can automatically open in a responsive Quick preview, while Full mode remains available. Korean and English interfaces, responsive layouts, and the system dark theme are supported.
+Gongmiri is a Chrome popup viewer for Shapefile ZIP archives. Explore geometry on a map, review DBF column quality, synchronize table rows with the map, and export the complete result with selected columns as GeoJSON or UTF-8 CSV. Large datasets can automatically open in a responsive Quick preview, while Full mode remains available. Korean and English interfaces, responsive layouts, and the system dark theme are supported.
 
 ## 권한 근거
 
@@ -39,7 +39,7 @@ Gongmiri is a full-page Chrome viewer for Shapefile ZIP archives. Explore geomet
 
 - [ ] 공개된 개인정보 처리방침 URL과 지원 이메일
 - [ ] 128×128 아이콘 및 스토어 요구 크기의 홍보 이미지
-- [ ] 업로드, 지도, 품질, 필터, 내보내기, 다크 모드 스크린샷
+- [ ] 업로드, 지도, 품질, 속성 테이블, 내보내기, 다크 모드 스크린샷
 - [ ] 단일 목적 설명과 각 권한의 최소 사용 근거
 - [ ] Windows Chrome 수동 체크리스트 완료
 - [ ] 실제 등록 버전과 `package.json`/매니페스트 버전 일치
