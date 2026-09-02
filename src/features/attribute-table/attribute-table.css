@@ -214,18 +214,6 @@
   background: var(--color-info-soft);
   box-shadow: inset 3px 0 var(--color-primary);
 }
-.react-table__grid .rdg-resize-handle::after {
-  position: absolute;
-  inset-block: 5px;
-  inset-inline-end: 4px;
-  width: 1px;
-  background: var(--color-border-strong);
-  content: "";
-}
-.react-table__grid .rdg-resize-handle:hover::after {
-  width: 2px;
-  background: var(--color-primary);
-}
 @media (max-width: 760px) {
   .react-table__tool-row--primary,
   .react-table__tool-row--filters { grid-template-columns: 1fr 1fr; }

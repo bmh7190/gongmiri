@@ -9,7 +9,6 @@ import { useTranslation } from "react-i18next";
 import {
   DataGrid,
   type Column as GridColumn,
-  type ColumnWidths,
   type DataGridHandle,
   type SortColumn as GridSortColumn,
 } from "react-data-grid";
@@ -58,7 +57,7 @@ type ManagedColumnState = {
 
 const GRID_DEFAULT_COLUMN_OPTIONS = {
   minWidth: 80,
-  resizable: true,
+  resizable: false,
   sortable: true,
   draggable: true,
 } as const;
@@ -73,6 +72,65 @@ const createManagedColumnState = (
   pinnedStart: [],
   pinnedEnd: [],
 });
+
+const getWheelPixels = (event: WheelEvent, grid: HTMLDivElement) => {
+  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? 34
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? grid.clientHeight
+      : 1;
+  let left = event.deltaX * unit;
+  let top = event.deltaY * unit;
+  if (event.shiftKey && left === 0) {
+    left = top;
+    top = 0;
+  }
+  return { left, top };
+};
+
+const useContainedGridInteraction = () => {
+  const gridRef = useRef<DataGridHandle>(null);
+
+  useEffect(() => {
+    const grid = gridRef.current?.element;
+    const outer = grid?.closest<HTMLElement>(".react-app");
+    if (!grid || !outer) return;
+
+    let wheelRestoreFrame = 0;
+    const restoreOuterAfterWheel = (top: number, left: number) => {
+      const restore = () => {
+        outer.scrollTop = top;
+        outer.scrollLeft = left;
+      };
+      window.cancelAnimationFrame(wheelRestoreFrame);
+      restore();
+      wheelRestoreFrame = window.requestAnimationFrame(() => {
+        restore();
+        wheelRestoreFrame = window.requestAnimationFrame(restore);
+      });
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const outerTop = outer.scrollTop;
+      const outerLeft = outer.scrollLeft;
+      const { left, top } = getWheelPixels(event, grid);
+      grid.scrollLeft += left;
+      grid.scrollTop += top;
+      restoreOuterAfterWheel(outerTop, outerLeft);
+    };
+
+    grid.addEventListener("wheel", handleWheel, { capture: true, passive: false });
+    return () => {
+      window.cancelAnimationFrame(wheelRestoreFrame);
+      grid.removeEventListener("wheel", handleWheel, true);
+    };
+  }, []);
+
+  return gridRef;
+};
 
 type SortableColumnOptionProps = {
   columnId: string;
@@ -196,14 +254,13 @@ export default function AttributeTable({
   exportOpen = false,
 }: AttributeTableProps) {
   const { t, i18n } = useTranslation();
-  const gridRef = useRef<DataGridHandle>(null);
+  const gridRef = useContainedGridInteraction();
   const [query, setQuery] = useState("");
   const [searchColumn, setSearchColumn] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
   const [emptyFilter, setEmptyFilter] = useState<EmptyValueFilter>("all");
   const [minimum, setMinimum] = useState("");
   const [maximum, setMaximum] = useState("");
-  const [gridColumnWidths, setGridColumnWidths] = useState<ColumnWidths>(() => new Map());
 
   const sourceRows = useMemo(
     () =>
@@ -331,7 +388,7 @@ export default function AttributeTable({
         width: estimatedColumnWidths.get(id) ?? 150,
         minWidth: 80,
         frozen: pinned === "start" ? "start" : pinned === "end" ? "end" : false,
-        resizable: true,
+        resizable: false,
         sortable: true,
         draggable: true,
         renderCell: ({ row }) => formatCell(row.properties[id]),
@@ -343,7 +400,6 @@ export default function AttributeTable({
     setManagedColumns((current) => current.datasetKey === datasetColumnKey
       ? current
       : createManagedColumnState(datasetColumnKey, columnOrder));
-    setGridColumnWidths(new Map());
     setGridSortColumns([]);
   }, [collection, columnOrder, datasetColumnKey]);
 
@@ -552,8 +608,6 @@ export default function AttributeTable({
         columns={gridColumns}
         rows={gridRows}
         rowKeyGetter={getGridRowKey}
-        columnWidths={gridColumnWidths}
-        onColumnWidthsChange={setGridColumnWidths}
         sortColumns={gridSortColumns}
         onSortColumnsChange={handleGridSortChange}
         onColumnsReorder={handleGridColumnReorder}
