@@ -63,7 +63,7 @@ describe("AttributeTable", () => {
     expect(html).toContain("Show all");
     expect(html).toContain('type="checkbox" checked=""');
     expect(html).not.toContain("<details open");
-    expect(html).toContain("rdg-resize-handle");
+    expect(html).not.toContain("resize-handle");
     expect(html).toContain("rdg-cell-draggable");
     expect(html).toContain("Pin name column left");
     expect(html).toContain("Pin score column right");

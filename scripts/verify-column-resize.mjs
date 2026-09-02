@@ -14,6 +14,7 @@ const distDir = path.join(projectDir, "dist");
 const temporaryDir = await mkdtemp(path.join(tmpdir(), "gongmiri-column-resize-"));
 const fixturePath = path.join(temporaryDir, "column-resize-fixture.zip");
 const useActionPopup = process.argv.includes("--popup");
+const useShortTable = process.argv.includes("--short-table");
 
 const delay = (milliseconds) => new Promise((resolve) => {
   setTimeout(resolve, milliseconds);
@@ -71,7 +72,7 @@ const createResizeFixture = async () => {
   ]);
   const collection = {
     type: "FeatureCollection",
-    features: Array.from({ length: 44 }, (_, index) => ({
+    features: Array.from({ length: useShortTable ? 6 : 44 }, (_, index) => ({
       type: "Feature",
       geometry: {
         type: "Point",
@@ -212,11 +213,6 @@ const dispatchWheel = (cdp, x, y, deltaX, deltaY) => cdp.send(
   },
 );
 
-const dispatchTouch = (cdp, type, x, y) => cdp.send("Input.dispatchTouchEvent", {
-  type,
-  touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1, radiusX: 1, radiusY: 1 }],
-});
-
 let chromeProcess;
 let cdp;
 
@@ -260,7 +256,6 @@ try {
   await cdp.send("Runtime.enable");
   await cdp.send("DOM.enable");
   await cdp.send("Page.enable");
-  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await cdp.send("Page.navigate", { url: viewerUrl });
   await waitFor(
     () => cdp.evaluate(
@@ -297,7 +292,6 @@ try {
     await cdp.send("Runtime.enable");
     await cdp.send("DOM.enable");
     await cdp.send("Page.enable");
-    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
     await waitFor(
       () => cdp.evaluate(
         `document.readyState === 'complete'
@@ -318,7 +312,7 @@ try {
     files: [fixturePath],
   });
   await waitFor(
-    () => cdp.evaluate("Boolean(document.querySelector('.rdg-resize-handle'))"),
+    () => cdp.evaluate("Boolean(document.querySelector('.react-table__grid'))"),
     "Attribute table render",
   );
 
@@ -339,17 +333,13 @@ try {
     viewport.scrollLeft = 275;
     await new Promise(requestAnimationFrame);
     await new Promise(requestAnimationFrame);
-    const handles = [...document.querySelectorAll('.rdg-resize-handle')];
     const viewportRect = viewport.getBoundingClientRect();
-    const visibleHandles = handles.filter((candidate) => {
+    const visibleHeaders = [...document.querySelectorAll('[role="columnheader"]')].filter((candidate) => {
       const candidateRect = candidate.getBoundingClientRect();
       return candidateRect.left >= viewportRect.left && candidateRect.right <= viewportRect.right;
     });
-    const handle = visibleHandles[Math.min(2, visibleHandles.length - 1)];
-    if (!handle) throw new Error('Resize handle was not found.');
-    const handleIndex = handles.indexOf(handle);
-    const rect = handle.getBoundingClientRect();
-    const header = handle.closest('[role="columnheader"]');
+    const header = visibleHeaders[Math.min(2, visibleHeaders.length - 1)];
+    if (!header) throw new Error('Visible column header was not found.');
     const headerRect = header.getBoundingClientRect();
     const visibleCell = [...document.querySelectorAll('[role="gridcell"]')].find((candidate) => {
       const candidateRect = candidate.getBoundingClientRect();
@@ -360,22 +350,17 @@ try {
     });
     if (!visibleCell) throw new Error('Visible grid cell was not found.');
     const cellRect = visibleCell.getBoundingClientRect();
-    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
     return {
       target: header.textContent.trim(),
-      handleIndex,
-      tagName: handle.tagName,
-      ariaHidden: handle.getAttribute('aria-hidden'),
-      hitClass: hit?.className ?? null,
-      x: rect.x + rect.width / 2,
-      y: rect.y + rect.height / 2,
+      resizeHandleCount: document.querySelectorAll('.react-table__resize-handle, .rdg-resize-handle').length,
+      boundaryX: headerRect.right - 1,
+      boundaryY: headerRect.y + headerRect.height / 2,
       viewportX: viewportRect.x + viewportRect.width / 2,
       viewportY: viewportRect.y + viewportRect.height / 2,
       headerX: headerRect.x + Math.min(headerRect.width / 2, headerRect.width - 16),
       headerY: headerRect.y + headerRect.height / 2,
       cellX: cellRect.x + cellRect.width / 2,
       cellY: cellRect.y + cellRect.height / 2,
-      width: header.getBoundingClientRect().width,
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
       visualWidth: window.visualViewport?.width ?? window.innerWidth,
@@ -385,24 +370,27 @@ try {
       rootTop: document.scrollingElement?.scrollTop ?? 0,
       appTop: app.scrollTop,
       appHeight: app.scrollHeight,
+      visibleResultPanels: [...document.querySelectorAll('.react-result-panel')]
+        .filter((panel) => getComputedStyle(panel).display !== 'none').length,
       viewportTop: viewport.scrollTop,
       viewportLeft: viewport.scrollLeft,
     };
   })()`);
 
-  assert.equal(initial.tagName, "DIV");
-  assert.equal(initial.ariaHidden, "true");
-  assert.match(initial.hitClass, /rdg-resize-handle/);
+  assert.equal(initial.resizeHandleCount, 0, "Column resize handles should not be rendered.");
+  assert.equal(initial.visibleResultPanels, 3, "The all-in-one result layout changed.");
   assert.ok(initial.appTop > 0, "Outer viewer did not reach a nested scroll position.");
-  assert.ok(initial.viewportTop > 0, "Table did not reach a vertical scroll position.");
+  if (useShortTable) {
+    assert.equal(initial.viewportTop, 0, "Short table unexpectedly became vertically scrollable.");
+  } else {
+    assert.ok(initial.viewportTop > 0, "Table did not reach a vertical scroll position.");
+  }
   assert.ok(initial.viewportLeft > 0, "Table did not reach a horizontal scroll position.");
 
   const readState = () => cdp.evaluate(`(() => {
     const app = document.querySelector('.react-app') || document.scrollingElement;
     const viewport = document.querySelector('.react-table__grid');
-    const handle = [...document.querySelectorAll('.rdg-resize-handle')][${initial.handleIndex}];
     return {
-      width: handle.closest('[role="columnheader"]').getBoundingClientRect().width,
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
       visualWidth: window.visualViewport?.width ?? window.innerWidth,
@@ -444,10 +432,18 @@ try {
     assertPopupGeometry(state, state.stage);
     assert.equal(state.appTop, initial.appTop, `${state.stage}: outer scroll moved during table scrolling.`);
   }
-  assert.ok(
-    trackpadStates.at(-1).viewportTop > initial.viewportTop,
-    "Trackpad-like wheel input did not scroll the data grid.",
-  );
+  if (useShortTable) {
+    assert.equal(
+      trackpadStates.at(-1).viewportTop,
+      initial.viewportTop,
+      "Short table unexpectedly scrolled vertically.",
+    );
+  } else {
+    assert.ok(
+      trackpadStates.at(-1).viewportTop > initial.viewportTop,
+      "Trackpad-like wheel input did not scroll the data grid.",
+    );
+  }
   const boundaryStates = [];
   await cdp.evaluate(`(() => {
     const app = document.querySelector('.react-app') || document.scrollingElement;
@@ -535,42 +531,16 @@ try {
   }
   console.log(JSON.stringify({ interactionStates, scrollIntoViewCalls }, null, 2));
 
-  await dispatchMouse(cdp, "mouseMoved", initial.x, initial.y, 0);
+  await dispatchMouse(cdp, "mouseMoved", initial.boundaryX, initial.boundaryY, 0);
   const hovered = await readState();
-  assertScrollPosition(hovered, "hover");
-
-  await dispatchTouch(cdp, "touchStart", initial.x, initial.y);
-  const pressed = await readState();
-  assertScrollPosition(pressed, "pointer down");
-  await dispatchTouch(cdp, "touchEnd", initial.x, initial.y);
-  await delay(50);
-  const clicked = await readState();
-  assert.equal(clicked.width, initial.width, "A click without movement changed the column width.");
-  assertScrollPosition(clicked, "click without movement");
-
-  await dispatchTouch(cdp, "touchStart", initial.x, initial.y);
-  const dragStates = [{ stage: "pressed", ...(await readState()) }];
-  for (const deltaX of [30, 60, 90]) {
-    await dispatchTouch(cdp, "touchMove", initial.x + deltaX, initial.y);
-    await delay(25);
-    dragStates.push({ stage: `moved-${deltaX}`, ...(await readState()) });
-  }
-  await dispatchTouch(cdp, "touchEnd", initial.x + 90, initial.y);
-  await delay(50);
-  const resized = await readState();
-  dragStates.push({ stage: "released", ...resized });
-  console.log(JSON.stringify({ dragStates }, null, 2));
-  assert.ok(
-    resized.width >= initial.width + 89,
-    `Data grid drag did not resize the column (${initial.width} -> ${resized.width}).`,
-  );
-  assertScrollPosition(resized, "data grid drag");
+  assertScrollPosition(hovered, "column boundary hover");
 
   console.log(JSON.stringify({
     environment: {
       extensionId,
       protocol: new URL(viewerUrl).protocol,
       surface: useActionPopup ? "action-popup" : "extension-tab",
+      rowScenario: useShortTable ? "short-table" : "scrollable-table",
       viewType: await cdp.evaluate(`chrome.extension.getViews({ type: "popup" }).includes(window)
         ? "popup"
         : "tab"`),
@@ -581,10 +551,8 @@ try {
     interactionStates,
     scrollIntoViewCalls,
     hovered,
-    clicked,
-    resized,
   }, null, 2));
-  console.log("Column resize browser regression check passed.");
+  console.log("Popup table scroll regression check passed.");
 } finally {
   cdp?.webSocket?.close();
   if (chromeProcess && chromeProcess.exitCode === null) {
