@@ -1,5 +1,5 @@
 # 🗺️ 공간데이터(SHP/ZIP) 미리보기 확장 프로그램
-**Gongmiri**는 다운로드한 Shapefile ZIP을 서버에 올리지 않고 브라우저 안에서 빠르게 검사하는 Chrome Extension입니다. 현재는 확장 아이콘으로 전체 화면 뷰어를 연 뒤 ZIP을 드래그하거나 직접 선택합니다.
+**Gongmiri**는 다운로드한 Shapefile ZIP을 서버에 올리지 않고 브라우저 안에서 빠르게 검사하는 Chrome Extension입니다. 확장 아이콘으로 팝업 뷰어를 연 뒤 ZIP을 드래그하거나 직접 선택합니다.
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-GongMiri-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/apllbcgmjgicgmgfpnkeddjammiellca?utm_source=item-share-cb)
 [![Notion Project](https://img.shields.io/badge/Notion_Project-Open-000000?logo=notion&logoColor=white)](https://www.notion.so/GongMiri-Project-2a7eb97891c680b88428e78c322776fc?source=copy_link)
@@ -55,8 +55,8 @@ ZIP 다운로드 → 압축 해제 → QGIS 실행 → 레이어 추가 → 속�
 - 범주·연속 색상, 포인트 크기, 클러스터 시각화
 - 한국어/영어 UI와 확장 메타데이터
 - Quick/Full 표시 모드
-- 컬럼·값 검색, NULL/숫자 범위 필터와 지도 동기화
-- 전체·선택·필터 결과의 Worker 기반 GeoJSON/UTF-8 CSV 저장
+- 가상 스크롤 속성 테이블의 정렬·컬럼 표시·고정·순서 변경과 지도 동기화
+- 전체 결과와 선택한 필드를 Worker 기반 GeoJSON/UTF-8 CSV로 저장
 - 선택형 다운로드 ZIP 감지와 시스템 다크 모드
 
 ## 기능별 화면 가이드
@@ -67,110 +67,54 @@ ZIP 다운로드 → 압축 해제 → QGIS 실행 → 레이어 추가 → 속�
 - Shapefile ZIP Drag & Drop / 파일 선택
 - `.shp/.dbf/.shx/(.prj|.cpg)` 필수 구성 검사
 - 인코딩(CPG) · 좌표계(PRJ) 자동 감지
+
 <table width="100%">
   <tr>
-    <th width="50%">ZIP 업로드·검사</th>
-    <th width="50%">파싱 진행 표시</th>
+    <th width="50%">ZIP 업로드</th>
+    <th width="50%">데이터 구성 요약</th>
   </tr>
   <tr>
-    <td width="50%"><img src="images/dropzone.png" alt="ZIP 업로드/검사" /></td>
-    <td width="50%"><img src="images/parsing.png" alt="파싱 진행" /></td>
+    <td width="50%"><img src="images/v0.2.0/upload.png" alt="공미리 ZIP 업로드 팝업" /></td>
+    <td width="50%"><img src="images/v0.2.0/overview.png" alt="공미리 데이터 구성 요약" /></td>
   </tr>
 </table>
 
-
-### 2) 좌표계 선택 · 자동 재투영
+### 2) 지도 렌더링 · 공간 시각화
 - PRJ 기반 EPSG 자동 추정
 - 4326 / 5179 / 5186 / 3857 등 사용자 지정 선택
-- 선택 즉시 전체 GeoJSON 재투영
-<table width="100%">
-  <tr>
-    <th width="50%">좌표계 선택</th>
-    <th width="50%">좌표계 적용중</th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="images/map/map-srid.png" alt="좌표계 선택" /></td>
-    <td width="50%"><img src="images/map/map-srid-2.png" alt="좌표계 선택 예시 2" /></td>
-  </tr>
-</table>
-
-
-### 3) 지도 렌더링 · 공간 시각화
 - MapLibre 기반 베이스맵
-- 포인트/라인/폴리곤 자동 스타일링
-- 클릭 시 속성 팝업 · 피처 하이라이트
+- 포인트/라인/폴리곤 자동 스타일링과 피처 하이라이트
+- 범주·연속 색상, 포인트 크기, 클러스터 보기 모드
 
-<table width="100%">
-  <tr>
-    <th width="50%">폴리곤 지도</th>
-    <th width="50%">폴리곤 지도 색상 적용 결과</th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="images/map/map(polygon).png" alt="폴리곤 지도" /></td>
-    <td width="50%"><img src="images/map/map-option-color-1-result.png" alt="포인트 색상 적용 결과" /></td>
+<img src="images/v0.2.0/map.png" alt="공미리 지도 미리보기와 보기 모드" width="100%" />
 
-  </tr>
-  <tr>
-    <th width="50%">기본 시각화 옵션</th>
-    <th width="50%">포인트 시각화 옵션 </th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="images/map/map-option-color-1.png" alt="색상 옵션" /></td>
-    <td width="50%"><img src="images/map/map(point)-option.png" alt="포인트 시각화 옵션" /></td>
-  </tr>
-  <tr>
-    <th width="50%">크기·클러스터 결과</th>
-    <th width="50%">포인트 지도</th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="images/map/map(point).png" alt="포인트 지도" /></td>
-    <td width="50%"><img src="images/map/map(point)-option-clustering-result.png" alt="포인트 크기/클러스터 결과" /></td>
-  </tr>
-</table>
-
-
-### 4) 속성 테이블 · 컬럼 채움도 분석
+### 3) 속성 테이블 · 컬럼 품질 분석
 - 대용량 대응 가상 스크롤 테이블
-- 컬럼 null 비율/unique 값/샘플 통계
-- 지도 ↔ 테이블 항목 동기 하이라이트
+- 컬럼 채움률·빈 값·고유값 요약
+- 정렬, 컬럼 표시·고정·순서 변경과 지도 동기 하이라이트
 
 <table width="100%">
   <tr>
-    <th width="50%">컬럼 요약</th>
+    <th width="50%">컬럼 품질</th>
     <th width="50%">속성 테이블</th>
   </tr>
   <tr>
-    <td width="50%"><img src="images/summary.png" alt="컬럼 요약" /></td>
-    <td width="50%"><img src="images/dbtable.png" alt="속성 테이블" /></td>
-
-  </tr>
-  <tr>
-    <th width="50%">컬럼 채움 정도(낮은 %)</th>
-    <th width="50%">컬럼 채움 정도(높은 %)</th>
-
-  </tr>
-  <tr>
-    <td width="50%"><img src="images/result.png" alt="결과 패널" /></td>
-    <td width="50%"><img src="images/result2.png" alt="결과 패널 2" /></td>
+    <td width="50%"><img src="images/v0.2.0/quality.png" alt="공미리 컬럼 품질 미리보기" /></td>
+    <td width="50%"><img src="images/v0.2.0/table.png" alt="공미리 속성 테이블" /></td>
   </tr>
 </table>
 
+### 4) GeoJSON · CSV 내보내기
+- 전체 결과에서 필요한 컬럼 선택
+- UTF-8 BOM CSV와 GeoJSON 저장
+- GeoJSON의 WGS84·원본 좌표계 선택
 
-### 5) 대용량 처리 · 진행 표시
+<img src="images/v0.2.0/export.png" alt="공미리 데이터 내보내기" width="100%" />
+
+### 5) 대용량 처리
 - 100MB·10만 피처·50만 좌표 중 하나를 넘으면 Quick을 기본값으로 선택
 - Quick / Full 표시 모드 제공(Quick은 최대 25,000피처를 전체 범위에서 균등 샘플링)
 - Web Worker 기반 파싱과 다국어 진행률 표시
-<table width="100%">
-  <tr>
-    <th width="50%">대용량 모드 안내</th>
-    <th width="50%">대용량 파싱</th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="images/mode.png" alt="대용량 모드 안내" /></td>
-    <td width="50%"><img src="images/parsing-big.png" alt="대용량 파싱" /></td>
-  </tr>
-</table>
-
 
 ## 지원/제한 사항
 - 입력: `.shp/.dbf/.shx` 필수, `.prj/.cpg` 권장(좌표계·인코딩 자동 감지)
