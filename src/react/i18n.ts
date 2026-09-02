@@ -5,11 +5,11 @@ import { messages } from "../locales/messages";
 export type AppLocale = keyof typeof messages;
 
 const STORAGE_KEY = "gongmiri.locale";
-const DEFAULT_LOCALE: AppLocale = "ko";
+const DEFAULT_LOCALE: AppLocale = "en";
 
 export const localeOptions: ReadonlyArray<{ code: AppLocale; label: string }> = [
-  { code: "ko", label: "한국어" },
   { code: "en", label: "English" },
+  { code: "ko", label: "한국어" },
 ];
 
 const isAppLocale = (value: unknown): value is AppLocale =>
