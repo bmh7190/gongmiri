@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -43,6 +43,7 @@ const findChromeExecutable = () => {
   const playwrightChromium = process.platform === "win32" ? findPlaywrightChromium() : null;
   const candidates = process.platform === "win32"
     ? [
+        process.env.CHROME_BIN,
         playwrightChromium,
         path.join(process.env.PROGRAMFILES ?? "", "Google/Chrome/Application/chrome.exe"),
         path.join(process.env["PROGRAMFILES(X86)"] ?? "", "Google/Chrome/Application/chrome.exe"),
@@ -51,15 +52,16 @@ const findChromeExecutable = () => {
         path.join(process.env.PROGRAMFILES ?? "", "Microsoft/Edge/Application/msedge.exe"),
       ]
     : process.platform === "darwin"
-      ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+      ? [process.env.CHROME_BIN, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
       : [
+          process.env.CHROME_BIN,
           "/usr/bin/google-chrome",
           "/usr/bin/google-chrome-stable",
           "/usr/bin/chromium",
           "/usr/bin/chromium-browser",
         ];
   const executable = candidates.find((candidate) => candidate && existsSync(candidate));
-  if (!executable) throw new Error("Google Chrome executable was not found.");
+  if (!executable) throw new Error("Chrome for Testing or Chromium executable was not found.");
   return executable;
 };
 
@@ -99,6 +101,7 @@ const prepareExtension = async () => {
   if (!useGrantedDownloads) return;
   extensionDir = path.join(temporaryDir, "extension-with-downloads");
   await cp(distDir, extensionDir, { recursive: true });
+  extensionDir = await realpath(extensionDir);
   const manifestPath = path.join(extensionDir, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.permissions = [...new Set([...(manifest.permissions ?? []), "downloads"])];
@@ -253,6 +256,7 @@ try {
   const viewerUrl = `chrome-extension://${extensionId}/extension/viewer.html`;
   chromeProcess = spawn(findChromeExecutable(), [
     "--headless=new",
+    ...(process.platform === "linux" && process.env.CI === "true" ? ["--no-sandbox"] : []),
     "--use-angle=swiftshader",
     "--enable-unsafe-swiftshader",
     "--no-first-run",

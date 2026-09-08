@@ -30,3 +30,16 @@ jobs:
 
       - name: Build extension
         run: npm run build
+
+      - name: Install Chrome for Testing
+        shell: bash
+        run: |
+          npx --yes @puppeteer/browsers@3.2.2 install chrome@stable --path "$RUNNER_TEMP/chrome-for-testing"
+          chrome_bin="$(find "$RUNNER_TEMP/chrome-for-testing" -type f -path '*/chrome-linux64/chrome' -print -quit)"
+          test -x "$chrome_bin"
+          echo "CHROME_BIN=$chrome_bin" >> "$GITHUB_ENV"
+
+      - name: Run browser regression checks
+        run: |
+          node scripts/verify-column-resize.mjs --invalid-zip
+          node scripts/verify-column-resize.mjs --granted-downloads
