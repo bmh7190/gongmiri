@@ -1,20 +1,24 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import shpwrite from "@mapbox/shp-write";
+import JSZip from "jszip";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectDir = path.resolve(scriptDir, "..");
 const distDir = path.join(projectDir, "dist");
 const temporaryDir = await mkdtemp(path.join(tmpdir(), "gongmiri-column-resize-"));
-const fixturePath = path.join(temporaryDir, "column-resize-fixture.zip");
+const fixturePath = path.join(temporaryDir, "browser-fixture.zip");
 const useActionPopup = process.argv.includes("--popup");
 const useShortTable = process.argv.includes("--short-table");
+const useInvalidZip = process.argv.includes("--invalid-zip");
+const useGrantedDownloads = process.argv.includes("--granted-downloads");
+let extensionDir = distDir;
 
 const delay = (milliseconds) => new Promise((resolve) => {
   setTimeout(resolve, milliseconds);
@@ -39,6 +43,7 @@ const findChromeExecutable = () => {
   const playwrightChromium = process.platform === "win32" ? findPlaywrightChromium() : null;
   const candidates = process.platform === "win32"
     ? [
+        process.env.CHROME_BIN,
         playwrightChromium,
         path.join(process.env.PROGRAMFILES ?? "", "Google/Chrome/Application/chrome.exe"),
         path.join(process.env["PROGRAMFILES(X86)"] ?? "", "Google/Chrome/Application/chrome.exe"),
@@ -47,19 +52,26 @@ const findChromeExecutable = () => {
         path.join(process.env.PROGRAMFILES ?? "", "Microsoft/Edge/Application/msedge.exe"),
       ]
     : process.platform === "darwin"
-      ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+      ? [process.env.CHROME_BIN, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
       : [
+          process.env.CHROME_BIN,
           "/usr/bin/google-chrome",
           "/usr/bin/google-chrome-stable",
           "/usr/bin/chromium",
           "/usr/bin/chromium-browser",
         ];
   const executable = candidates.find((candidate) => candidate && existsSync(candidate));
-  if (!executable) throw new Error("Google Chrome executable was not found.");
+  if (!executable) throw new Error("Chrome for Testing or Chromium executable was not found.");
   return executable;
 };
 
 const createResizeFixture = async () => {
+  if (useInvalidZip) {
+    const zip = new JSZip();
+    zip.file("README.txt", "This archive intentionally contains no Shapefile components.");
+    await writeFile(fixturePath, await zip.generateAsync({ type: "nodebuffer" }));
+    return;
+  }
   const properties = (index) => Object.fromEntries([
     ["name", `Feature ${String(index + 1).padStart(3, "0")}`],
     ["group", `Group ${index % 8}`],
@@ -83,6 +95,19 @@ const createResizeFixture = async () => {
   };
   const zip = await shpwrite.zip(collection, { outputType: "uint8array" });
   await writeFile(fixturePath, Buffer.from(zip));
+};
+
+const prepareExtension = async () => {
+  if (!useGrantedDownloads) return;
+  extensionDir = path.join(temporaryDir, "extension-with-downloads");
+  await cp(distDir, extensionDir, { recursive: true });
+  extensionDir = await realpath(extensionDir);
+  const manifestPath = path.join(extensionDir, "manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.permissions = [...new Set([...(manifest.permissions ?? []), "downloads"])];
+  manifest.optional_permissions = (manifest.optional_permissions ?? [])
+    .filter((permission) => permission !== "downloads");
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 };
 
 const getUnpackedExtensionId = (extensionPath) => {
@@ -181,11 +206,18 @@ const connectCdp = async (webSocketUrl) => {
 
 const waitFor = async (check, label, timeout = 15_000) => {
   const startedAt = Date.now();
+  let lastError;
   while (Date.now() - startedAt < timeout) {
-    if (await check()) return;
+    try {
+      if (await check()) return;
+    } catch (error) {
+      lastError = error;
+    }
     await delay(100);
   }
-  throw new Error(`${label} timed out.`);
+  throw new Error(
+    `${label} timed out.${lastError instanceof Error ? ` Last error: ${lastError.message}` : ""}`,
+  );
 };
 
 const dispatchMouse = (cdp, type, x, y, buttons, clickCount = 0) => cdp.send(
@@ -218,11 +250,13 @@ let cdp;
 
 try {
   assert.ok(existsSync(path.join(distDir, "extension/viewer.html")), "Run npm run build first.");
+  await prepareExtension();
   await createResizeFixture();
-  const extensionId = getUnpackedExtensionId(distDir);
+  const extensionId = getUnpackedExtensionId(extensionDir);
   const viewerUrl = `chrome-extension://${extensionId}/extension/viewer.html`;
   chromeProcess = spawn(findChromeExecutable(), [
     "--headless=new",
+    ...(process.platform === "linux" && process.env.CI === "true" ? ["--no-sandbox"] : []),
     "--use-angle=swiftshader",
     "--enable-unsafe-swiftshader",
     "--no-first-run",
@@ -231,8 +265,8 @@ try {
     "--remote-debugging-port=0",
     "--window-size=800,600",
     "--window-position=-32000,-32000",
-    `--disable-extensions-except=${distDir}`,
-    `--load-extension=${distDir}`,
+    `--disable-extensions-except=${extensionDir}`,
+    `--load-extension=${extensionDir}`,
     `--user-data-dir=${path.join(temporaryDir, "chrome-profile")}`,
     viewerUrl,
   ], {
@@ -268,6 +302,9 @@ try {
 
   if (useActionPopup) {
     const existingTargetId = pageTarget.id;
+    if (useGrantedDownloads) {
+      await cdp.evaluate(`chrome.action.setBadgeText({ text: "ZIP" })`);
+    }
     const openPopupResult = await cdp.evaluate(`chrome.action.openPopup()
       .then(() => ({ ok: true }))
       .catch((error) => ({ ok: false, message: error?.message ?? String(error) }))`);
@@ -301,6 +338,45 @@ try {
     );
   }
 
+  verification: {
+  if (useGrantedDownloads) {
+    await waitFor(
+      () => cdp.evaluate("Boolean(document.querySelector('.react-download-detection-toggle'))"),
+      "Granted download permission state",
+    );
+    const permissionState = await cdp.evaluate(`(async () => ({
+      hasPermission: await chrome.permissions.contains({ permissions: ['downloads'] }),
+      promptVisible: Boolean(document.querySelector('.react-download-detection')),
+      toggleVisible: Boolean(document.querySelector('.react-download-detection-toggle')),
+      badgeText: await chrome.action.getBadgeText({}),
+      legacyFlag: (await chrome.storage.local.get('gongmiri.downloadDetectionEnabled'))
+        ['gongmiri.downloadDetectionEnabled'] ?? null,
+    }))()`);
+    assert.equal(permissionState.hasPermission, true, "Downloads permission was not available.");
+    assert.equal(permissionState.promptVisible, false, "Onboarding prompt returned for a granted permission.");
+    assert.equal(permissionState.toggleVisible, true, "Compact download toggle was not rendered.");
+    assert.equal(permissionState.badgeText, "", "Opening the viewer did not acknowledge the ZIP badge.");
+    assert.equal(permissionState.legacyFlag, null, "Permission state unexpectedly depends on a legacy flag.");
+
+    await cdp.evaluate(`chrome.action.setBadgeText({ text: "ZIP" })`);
+    await cdp.send("Page.reload");
+    await waitFor(
+      () => cdp.evaluate(`document.readyState === 'complete'
+        && Boolean(document.querySelector('.react-download-detection-toggle'))`),
+      "Granted permission state after popup reload",
+    );
+    const reloadedState = await cdp.evaluate(`(async () => ({
+      promptVisible: Boolean(document.querySelector('.react-download-detection')),
+      toggleVisible: Boolean(document.querySelector('.react-download-detection-toggle')),
+      badgeText: await chrome.action.getBadgeText({}),
+    }))()`);
+    assert.equal(reloadedState.promptVisible, false, "Onboarding prompt returned after popup reload.");
+    assert.equal(reloadedState.toggleVisible, true, "Compact toggle disappeared after popup reload.");
+    assert.equal(reloadedState.badgeText, "", "Popup reload did not clear the acknowledged badge.");
+    console.log(JSON.stringify({ permissionState, reloadedState }, null, 2));
+    console.log("Persistent download permission regression check passed.");
+    break verification;
+  }
   const documentResult = await cdp.send("DOM.getDocument", { depth: 1 });
   const inputResult = await cdp.send("DOM.querySelector", {
     nodeId: documentResult.root.nodeId,
@@ -311,6 +387,96 @@ try {
     nodeId: inputResult.nodeId,
     files: [fixturePath],
   });
+  if (useInvalidZip) {
+    await waitFor(
+      () => cdp.evaluate("Boolean(document.querySelector('.react-invalid-zip-dialog[open]'))"),
+      "Invalid ZIP dialog render",
+    );
+    const invalidDialogState = await cdp.evaluate(`(() => {
+      const app = document.querySelector('.react-app');
+      const dialog = document.querySelector('.react-invalid-zip-dialog');
+      const rect = dialog.getBoundingClientRect();
+      return {
+        open: dialog.open,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        rootWidth: document.documentElement.scrollWidth,
+        appWidth: app.scrollWidth,
+        appClientWidth: app.clientWidth,
+        dialogWidth: rect.width,
+        dialogHeight: rect.height,
+        dialogScrollWidth: dialog.scrollWidth,
+        dialogClientWidth: dialog.clientWidth,
+        requiredFileCount: dialog.querySelectorAll('.react-invalid-zip-dialog__required span').length,
+        backgroundIsEmpty: document.querySelector('.react-grid')?.classList.contains('is-empty'),
+        statusDisplay: getComputedStyle(document.querySelector('.react-status')).display,
+      };
+    })()`);
+    assert.equal(invalidDialogState.open, true, "Invalid ZIP dialog did not open.");
+    assert.equal(invalidDialogState.rootWidth, invalidDialogState.innerWidth, "Root gained horizontal overflow.");
+    assert.equal(invalidDialogState.appWidth, invalidDialogState.appClientWidth, "Viewer gained horizontal overflow.");
+    assert.equal(
+      invalidDialogState.dialogScrollWidth,
+      invalidDialogState.dialogClientWidth,
+      "Invalid ZIP dialog gained horizontal overflow.",
+    );
+    assert.ok(invalidDialogState.dialogWidth < invalidDialogState.innerWidth, "Dialog exceeded popup width.");
+    assert.ok(invalidDialogState.dialogHeight < invalidDialogState.innerHeight, "Dialog exceeded popup height.");
+    assert.equal(invalidDialogState.requiredFileCount, 3, "Required Shapefile components are incomplete.");
+    assert.equal(invalidDialogState.backgroundIsEmpty, true, "Invalid ZIP changed the viewer result layout.");
+    assert.equal(invalidDialogState.statusDisplay, "none", "Invalid ZIP exposed the empty result section.");
+
+    await cdp.evaluate("document.querySelector('.react-invalid-zip-dialog footer button')?.click()");
+    await waitFor(
+      () => cdp.evaluate("!document.querySelector('.react-invalid-zip-dialog')"),
+      "Invalid ZIP dialog close",
+    );
+    await waitFor(
+      () => cdp.evaluate("document.activeElement === document.querySelector('input[type=\"file\"]')"),
+      "File picker focus restoration",
+    );
+    const closedState = await cdp.evaluate(`(() => ({
+      dropZoneVisible: getComputedStyle(document.querySelector('.react-drop-zone')).display !== 'none',
+      inputFocused: document.activeElement === document.querySelector('input[type="file"]'),
+    }))()`);
+    assert.equal(closedState.dropZoneVisible, true, "Drop zone did not return after closing the dialog.");
+    assert.equal(closedState.inputFocused, true, "Focus did not return to the file picker.");
+
+    const reopenedDocument = await cdp.send("DOM.getDocument", { depth: 1 });
+    const reopenedInput = await cdp.send("DOM.querySelector", {
+      nodeId: reopenedDocument.root.nodeId,
+      selector: 'input[type="file"]',
+    });
+    assert.ok(reopenedInput.nodeId, "Viewer file input was not restored.");
+    await cdp.send("DOM.setFileInputFiles", {
+      nodeId: reopenedInput.nodeId,
+      files: [fixturePath],
+    });
+    await waitFor(
+      () => cdp.evaluate("Boolean(document.querySelector('.react-invalid-zip-dialog[open]'))"),
+      "Invalid ZIP dialog reopen",
+    );
+    await cdp.evaluate(`(() => {
+      window.__gongmiriFileChooserClicks = 0;
+      document.querySelector('input[type="file"]')?.addEventListener('click', () => {
+        window.__gongmiriFileChooserClicks += 1;
+      }, { once: true });
+      document.querySelector('.react-invalid-zip-dialog footer .is-primary')?.click();
+    })()`);
+    await waitFor(
+      () => cdp.evaluate("!document.querySelector('.react-invalid-zip-dialog')"),
+      "Choose another ZIP action",
+    );
+    await delay(50);
+    assert.equal(
+      await cdp.evaluate("window.__gongmiriFileChooserClicks"),
+      1,
+      "Choose another ZIP did not invoke the file picker.",
+    );
+    console.log(JSON.stringify({ invalidDialogState, closedState }, null, 2));
+    console.log("Invalid ZIP popup regression check passed.");
+    break verification;
+  }
   await waitFor(
     () => cdp.evaluate("Boolean(document.querySelector('.react-table__grid'))"),
     "Attribute table render",
@@ -648,6 +814,7 @@ try {
     showAllClicked,
   }, null, 2));
   console.log("Popup table scroll regression check passed.");
+  }
 } finally {
   cdp?.webSocket?.close();
   if (chromeProcess && chromeProcess.exitCode === null) {

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  DOWNLOAD_DETECTION_ENABLED_KEY,
   RECENT_ZIP_DOWNLOAD_KEY,
   type RecentZipDownload,
 } from "../../domain/download-detection";
@@ -33,16 +32,40 @@ export const useDownloadDetection = (): DownloadDetectionController => {
       setIsReady(true);
       return;
     }
-    void Promise.all([
-      chrome.permissions.contains({ permissions: ["downloads"] }),
-      chrome.storage.local.get([
-        DOWNLOAD_DETECTION_ENABLED_KEY,
-        RECENT_ZIP_DOWNLOAD_KEY,
-      ]),
-    ]).then(([hasPermission, stored]) => {
-      setEnabled(hasPermission && stored[DOWNLOAD_DETECTION_ENABLED_KEY] === true);
-      setRecent((stored[RECENT_ZIP_DOWNLOAD_KEY] as RecentZipDownload | undefined) ?? null);
-    }).catch(() => setEnabled(false)).finally(() => setIsReady(true));
+
+    let active = true;
+    const syncState = async () => {
+      try {
+        const [hasPermission, stored] = await Promise.all([
+          chrome.permissions.contains({ permissions: ["downloads"] }),
+          chrome.storage.local.get(RECENT_ZIP_DOWNLOAD_KEY),
+        ]);
+        if (!active) return;
+        setEnabled(hasPermission);
+        setRecent(
+          hasPermission
+            ? (stored[RECENT_ZIP_DOWNLOAD_KEY] as RecentZipDownload | undefined) ?? null
+            : null,
+        );
+      } catch {
+        if (active) setEnabled(false);
+      } finally {
+        if (active) setIsReady(true);
+      }
+    };
+    const handlePermissionChange = (permissions: chrome.permissions.Permissions) => {
+      if (permissions.permissions?.includes("downloads")) void syncState();
+    };
+
+    void chrome.action.setBadgeText({ text: "" }).catch(() => {});
+    void syncState();
+    chrome.permissions.onAdded.addListener(handlePermissionChange);
+    chrome.permissions.onRemoved.addListener(handlePermissionChange);
+    return () => {
+      active = false;
+      chrome.permissions.onAdded.removeListener(handlePermissionChange);
+      chrome.permissions.onRemoved.removeListener(handlePermissionChange);
+    };
   }, [supported]);
 
   const toggle = async () => {
@@ -50,10 +73,15 @@ export const useDownloadDetection = (): DownloadDetectionController => {
     setPermissionDenied(false);
     try {
       if (enabled) {
-        await chrome.storage.local.set({ [DOWNLOAD_DETECTION_ENABLED_KEY]: false });
-        await chrome.permissions.remove({ permissions: ["downloads"] });
-        await chrome.action.setBadgeText({ text: "" });
-        setEnabled(false);
+        const removed = await chrome.permissions.remove({ permissions: ["downloads"] });
+        if (removed) {
+          await Promise.all([
+            chrome.action.setBadgeText({ text: "" }),
+            chrome.storage.local.remove(RECENT_ZIP_DOWNLOAD_KEY),
+          ]);
+          setRecent(null);
+          setEnabled(false);
+        }
         return;
       }
       const granted = await chrome.permissions.request({ permissions: ["downloads"] });
@@ -61,7 +89,6 @@ export const useDownloadDetection = (): DownloadDetectionController => {
         setPermissionDenied(true);
         return;
       }
-      await chrome.storage.local.set({ [DOWNLOAD_DETECTION_ENABLED_KEY]: true });
       setEnabled(true);
     } finally {
       setIsChanging(false);

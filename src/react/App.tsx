@@ -17,6 +17,9 @@ import DatasetControls from "../features/dataset-controls/DatasetControls";
 import DatasetSummary from "../features/dataset-summary/DatasetSummary";
 import VisualizationControls from "../features/visualization/VisualizationControls";
 import ExportDialog from "../features/export/ExportDialog";
+import InvalidZipDialog, {
+  type InvalidZipIssue,
+} from "../features/invalid-zip/InvalidZipDialog";
 import {
   DownloadDetectionPrompt,
   DownloadDetectionToggle,
@@ -66,6 +69,7 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [invalidZipIssue, setInvalidZipIssue] = useState<InvalidZipIssue | null>(null);
   const [inspection, setInspection] = useState<ZipInspection | null>(null);
   const [result, setResult] = useState<ViewerResult | null>(null);
   const [collection, setCollection] = useState<FeatureCollectionGeometry | null>(null);
@@ -80,6 +84,7 @@ export default function App() {
   const [visibleTableFields, setVisibleTableFields] = useState<string[]>([]);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mapCollection = collection;
   const [visualizationSettings, setVisualizationSettings] =
     useState<VisualizationSettings>(createDefaultVisualization);
@@ -243,6 +248,7 @@ export default function App() {
 
       setIsLoading(true);
       setError("");
+      setInvalidZipIssue(null);
       setInspection(null);
       setResult(null);
       setCollection(null);
@@ -260,16 +266,11 @@ export default function App() {
       try {
         const buffer = await file.arrayBuffer();
         const nextInspection = await inspectZipEntries(buffer);
-        setInspection(nextInspection);
         if (!nextInspection.hasValidLayer) {
-          const details = nextInspection.layers.length
-            ? nextInspection.layers
-                .map((layer) => `${layer.name}: ${layer.missingEssential.join(", ")}`)
-                .join("; ")
-            : t("error.noShapefileEntries");
-          setError(t("error.essentialFilesMissing", { details }));
+          setInvalidZipIssue({ fileName: file.name, layers: nextInspection.layers });
           return;
         }
+        setInspection(nextInspection);
 
         const encoding: EncodingOption =
           nextInspection.detectedEncoding ?? "utf-8";
@@ -357,6 +358,16 @@ export default function App() {
       parseMode,
       source.fileBytes,
     );
+  };
+
+  const handleCloseInvalidZip = () => {
+    setInvalidZipIssue(null);
+    window.requestAnimationFrame(() => fileInputRef.current?.focus());
+  };
+
+  const handleChooseAnotherZip = () => {
+    setInvalidZipIssue(null);
+    window.setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
   const handleResultTabKeyDown = (
@@ -472,6 +483,7 @@ export default function App() {
             onDrop={handleDrop}
           >
             <input
+              ref={fileInputRef}
               type="file"
               accept=".zip,application/zip"
               disabled={isLoading}
@@ -656,17 +668,15 @@ export default function App() {
               </section>
             </div>
           )}
-          {inspection && !inspection.hasValidLayer && (
-            <ul>
-              {inspection.layers.map((layer) => (
-                <li key={layer.name}>
-                  {layer.name}: {layer.missingEssential.join(", ")}
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </section>
+      {invalidZipIssue && (
+        <InvalidZipDialog
+          issue={invalidZipIssue}
+          onClose={handleCloseInvalidZip}
+          onChooseAnother={handleChooseAnotherZip}
+        />
+      )}
       {isExportOpen && collection && result && (
         <ExportDialog
           collection={collection}

@@ -5,7 +5,7 @@
 - 이름: 공미리 — Shapefile ZIP 미리보기
 - 짧은 설명: Shapefile ZIP의 지도, 속성, 품질을 서버 업로드 없이 Chrome에서 빠르게 확인합니다.
 - 카테고리 제안: 생산성
-- 기본 언어: 한국어
+- 기본 언어: 영어 (한국어 지원)
 
 ## 상세 설명
 
@@ -31,15 +31,20 @@ Gongmiri is a Chrome popup viewer for Shapefile ZIP archives. Explore geometry o
 
 ## 권한 근거
 
-- `storage`: 언어와 다운로드 감지 설정을 기기에 유지.
+- `storage`: 언어와 최근 감지한 ZIP의 최소 메타데이터를 기기에 유지.
 - `downloads` (optional): 사용자가 다운로드 ZIP 감지를 켠 경우 완료된 ZIP 후보만 식별.
 - `basemaps.cartocdn.com`: 지도 배경 타일 표시. 사용자 데이터는 전송하지 않음.
 
 ## 등록 전 준비물
 
-- [ ] 공개된 개인정보 처리방침 URL과 지원 이메일
+- [x] 공개된 개인정보 처리방침 URL과 지원 이메일
 - [ ] 128×128 아이콘 및 스토어 요구 크기의 홍보 이미지
 - [ ] 업로드, 지도, 품질, 속성 테이블, 내보내기, 다크 모드 스크린샷
 - [ ] 단일 목적 설명과 각 권한의 최소 사용 근거
 - [ ] Windows Chrome 수동 체크리스트 완료
 - [ ] 실제 등록 버전과 `package.json`/매니페스트 버전 일치
+
+## 지원 및 개인정보 처리방침
+
+- 지원 이메일: bmh7190@naver.com
+- 개인정보 처리방침: https://github.com/bmh7190/gongmiri/blob/main/docs/privacy-policy.md
