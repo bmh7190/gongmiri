@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -17,6 +17,8 @@ const fixturePath = path.join(temporaryDir, "browser-fixture.zip");
 const useActionPopup = process.argv.includes("--popup");
 const useShortTable = process.argv.includes("--short-table");
 const useInvalidZip = process.argv.includes("--invalid-zip");
+const useGrantedDownloads = process.argv.includes("--granted-downloads");
+let extensionDir = distDir;
 
 const delay = (milliseconds) => new Promise((resolve) => {
   setTimeout(resolve, milliseconds);
@@ -91,6 +93,18 @@ const createResizeFixture = async () => {
   };
   const zip = await shpwrite.zip(collection, { outputType: "uint8array" });
   await writeFile(fixturePath, Buffer.from(zip));
+};
+
+const prepareExtension = async () => {
+  if (!useGrantedDownloads) return;
+  extensionDir = path.join(temporaryDir, "extension-with-downloads");
+  await cp(distDir, extensionDir, { recursive: true });
+  const manifestPath = path.join(extensionDir, "manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.permissions = [...new Set([...(manifest.permissions ?? []), "downloads"])];
+  manifest.optional_permissions = (manifest.optional_permissions ?? [])
+    .filter((permission) => permission !== "downloads");
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 };
 
 const getUnpackedExtensionId = (extensionPath) => {
@@ -233,8 +247,9 @@ let cdp;
 
 try {
   assert.ok(existsSync(path.join(distDir, "extension/viewer.html")), "Run npm run build first.");
+  await prepareExtension();
   await createResizeFixture();
-  const extensionId = getUnpackedExtensionId(distDir);
+  const extensionId = getUnpackedExtensionId(extensionDir);
   const viewerUrl = `chrome-extension://${extensionId}/extension/viewer.html`;
   chromeProcess = spawn(findChromeExecutable(), [
     "--headless=new",
@@ -246,8 +261,8 @@ try {
     "--remote-debugging-port=0",
     "--window-size=800,600",
     "--window-position=-32000,-32000",
-    `--disable-extensions-except=${distDir}`,
-    `--load-extension=${distDir}`,
+    `--disable-extensions-except=${extensionDir}`,
+    `--load-extension=${extensionDir}`,
     `--user-data-dir=${path.join(temporaryDir, "chrome-profile")}`,
     viewerUrl,
   ], {
@@ -283,6 +298,9 @@ try {
 
   if (useActionPopup) {
     const existingTargetId = pageTarget.id;
+    if (useGrantedDownloads) {
+      await cdp.evaluate(`chrome.action.setBadgeText({ text: "ZIP" })`);
+    }
     const openPopupResult = await cdp.evaluate(`chrome.action.openPopup()
       .then(() => ({ ok: true }))
       .catch((error) => ({ ok: false, message: error?.message ?? String(error) }))`);
@@ -317,6 +335,44 @@ try {
   }
 
   verification: {
+  if (useGrantedDownloads) {
+    await waitFor(
+      () => cdp.evaluate("Boolean(document.querySelector('.react-download-detection-toggle'))"),
+      "Granted download permission state",
+    );
+    const permissionState = await cdp.evaluate(`(async () => ({
+      hasPermission: await chrome.permissions.contains({ permissions: ['downloads'] }),
+      promptVisible: Boolean(document.querySelector('.react-download-detection')),
+      toggleVisible: Boolean(document.querySelector('.react-download-detection-toggle')),
+      badgeText: await chrome.action.getBadgeText({}),
+      legacyFlag: (await chrome.storage.local.get('gongmiri.downloadDetectionEnabled'))
+        ['gongmiri.downloadDetectionEnabled'] ?? null,
+    }))()`);
+    assert.equal(permissionState.hasPermission, true, "Downloads permission was not available.");
+    assert.equal(permissionState.promptVisible, false, "Onboarding prompt returned for a granted permission.");
+    assert.equal(permissionState.toggleVisible, true, "Compact download toggle was not rendered.");
+    assert.equal(permissionState.badgeText, "", "Opening the viewer did not acknowledge the ZIP badge.");
+    assert.equal(permissionState.legacyFlag, null, "Permission state unexpectedly depends on a legacy flag.");
+
+    await cdp.evaluate(`chrome.action.setBadgeText({ text: "ZIP" })`);
+    await cdp.send("Page.reload");
+    await waitFor(
+      () => cdp.evaluate(`document.readyState === 'complete'
+        && Boolean(document.querySelector('.react-download-detection-toggle'))`),
+      "Granted permission state after popup reload",
+    );
+    const reloadedState = await cdp.evaluate(`(async () => ({
+      promptVisible: Boolean(document.querySelector('.react-download-detection')),
+      toggleVisible: Boolean(document.querySelector('.react-download-detection-toggle')),
+      badgeText: await chrome.action.getBadgeText({}),
+    }))()`);
+    assert.equal(reloadedState.promptVisible, false, "Onboarding prompt returned after popup reload.");
+    assert.equal(reloadedState.toggleVisible, true, "Compact toggle disappeared after popup reload.");
+    assert.equal(reloadedState.badgeText, "", "Popup reload did not clear the acknowledged badge.");
+    console.log(JSON.stringify({ permissionState, reloadedState }, null, 2));
+    console.log("Persistent download permission regression check passed.");
+    break verification;
+  }
   const documentResult = await cdp.send("DOM.getDocument", { depth: 1 });
   const inputResult = await cdp.send("DOM.querySelector", {
     nodeId: documentResult.root.nodeId,

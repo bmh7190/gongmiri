@@ -36,16 +36,25 @@ const handleDownloadsChanged = (delta: chrome.downloads.DownloadDelta) => {
 let downloadListenerAttached = false;
 
 const syncDownloadListener = async () => {
-  const hasPermission = await chrome.permissions.contains({ permissions: ["downloads"] });
-  if (hasPermission && !downloadListenerAttached) {
-    chrome.downloads.onChanged.addListener(handleDownloadsChanged);
-    downloadListenerAttached = true;
-    return;
-  }
-  if (!hasPermission && downloadListenerAttached) {
-    chrome.downloads.onChanged.removeListener(handleDownloadsChanged);
-    downloadListenerAttached = false;
-    await chrome.action.setBadgeText({ text: "" });
+  try {
+    const hasPermission = await chrome.permissions.contains({ permissions: ["downloads"] });
+    if (hasPermission && !downloadListenerAttached) {
+      chrome.downloads.onChanged.addListener(handleDownloadsChanged);
+      downloadListenerAttached = true;
+      return;
+    }
+    if (!hasPermission && downloadListenerAttached) {
+      chrome.downloads?.onChanged.removeListener(handleDownloadsChanged);
+      downloadListenerAttached = false;
+    }
+    if (!hasPermission) {
+      await Promise.all([
+        chrome.action.setBadgeText({ text: "" }),
+        chrome.storage.local.remove(RECENT_ZIP_DOWNLOAD_KEY),
+      ]);
+    }
+  } catch (error) {
+    console.warn("[gongmiri] could not synchronize download detection", error);
   }
 };
 

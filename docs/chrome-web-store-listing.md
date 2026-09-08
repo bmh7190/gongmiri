@@ -31,7 +31,7 @@ Gongmiri is a Chrome popup viewer for Shapefile ZIP archives. Explore geometry o
 
 ## 권한 근거
 
-- `storage`: 언어와 다운로드 감지 설정을 기기에 유지.
+- `storage`: 언어와 최근 감지한 ZIP의 최소 메타데이터를 기기에 유지.
 - `downloads` (optional): 사용자가 다운로드 ZIP 감지를 켠 경우 완료된 ZIP 후보만 식별.
 - `basemaps.cartocdn.com`: 지도 배경 타일 표시. 사용자 데이터는 전송하지 않음.
 
