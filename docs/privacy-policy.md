@@ -1,6 +1,6 @@
 # 공미리 개인정보 처리 안내 / Gongmiri Privacy Notice
 
-최종 수정일: 2026-08-31
+최종 수정일: 2026-09-08
 
 공미리는 Shapefile ZIP을 사용자의 Chrome 브라우저 안에서 검사하는 확장 프로그램이다. 사용자가 선택한 ZIP, SHP 도형, DBF 속성 및 생성된 분석 결과는 공미리 개발자나 별도 분석 서버로 전송하지 않는다.
 
@@ -27,4 +27,7 @@ ZIP 분석 데이터는 현재 탭의 메모리에서만 유지되며 탭을 닫
 
 Gongmiri processes user-selected Shapefile ZIPs locally in Chrome. ZIP contents, geometries, DBF attributes, and analysis results are not uploaded to the developer or an analysis server. The `storage` permission keeps the language preference and minimal recent-ZIP metadata locally. If the user explicitly enables downloaded-ZIP detection, the optional `downloads` permission checks completed items and stores only the download ID, basename, and detection time; it does not read file contents or retain full local paths. Turning the feature off or revoking the permission removes that recent-ZIP metadata. Basemap tile requests may be sent to `basemaps.cartocdn.com`, but selected datasets and attributes are never included.
 
-Before publishing, replace this paragraph with the maintainer's support email and public policy URL required by the Chrome Web Store listing.
+## 문의 / Contact
+
+- 지원 이메일 / Support email: bmh7190@naver.com
+- 공개 정책 URL / Public policy URL: https://github.com/bmh7190/gongmiri/blob/main/docs/privacy-policy.md
