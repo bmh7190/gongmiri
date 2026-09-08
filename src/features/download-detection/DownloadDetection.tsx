@@ -42,7 +42,11 @@ export const useDownloadDetection = (): DownloadDetectionController => {
         ]);
         if (!active) return;
         setEnabled(hasPermission);
-        setRecent((stored[RECENT_ZIP_DOWNLOAD_KEY] as RecentZipDownload | undefined) ?? null);
+        setRecent(
+          hasPermission
+            ? (stored[RECENT_ZIP_DOWNLOAD_KEY] as RecentZipDownload | undefined) ?? null
+            : null,
+        );
       } catch {
         if (active) setEnabled(false);
       } finally {
@@ -53,6 +57,7 @@ export const useDownloadDetection = (): DownloadDetectionController => {
       if (permissions.permissions?.includes("downloads")) void syncState();
     };
 
+    void chrome.action.setBadgeText({ text: "" }).catch(() => {});
     void syncState();
     chrome.permissions.onAdded.addListener(handlePermissionChange);
     chrome.permissions.onRemoved.addListener(handlePermissionChange);
@@ -69,8 +74,14 @@ export const useDownloadDetection = (): DownloadDetectionController => {
     try {
       if (enabled) {
         const removed = await chrome.permissions.remove({ permissions: ["downloads"] });
-        await chrome.action.setBadgeText({ text: "" });
-        if (removed) setEnabled(false);
+        if (removed) {
+          await Promise.all([
+            chrome.action.setBadgeText({ text: "" }),
+            chrome.storage.local.remove(RECENT_ZIP_DOWNLOAD_KEY),
+          ]);
+          setRecent(null);
+          setEnabled(false);
+        }
         return;
       }
       const granted = await chrome.permissions.request({ permissions: ["downloads"] });
