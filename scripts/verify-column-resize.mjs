@@ -7,14 +7,16 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import shpwrite from "@mapbox/shp-write";
+import JSZip from "jszip";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectDir = path.resolve(scriptDir, "..");
 const distDir = path.join(projectDir, "dist");
 const temporaryDir = await mkdtemp(path.join(tmpdir(), "gongmiri-column-resize-"));
-const fixturePath = path.join(temporaryDir, "column-resize-fixture.zip");
+const fixturePath = path.join(temporaryDir, "browser-fixture.zip");
 const useActionPopup = process.argv.includes("--popup");
 const useShortTable = process.argv.includes("--short-table");
+const useInvalidZip = process.argv.includes("--invalid-zip");
 
 const delay = (milliseconds) => new Promise((resolve) => {
   setTimeout(resolve, milliseconds);
@@ -60,6 +62,12 @@ const findChromeExecutable = () => {
 };
 
 const createResizeFixture = async () => {
+  if (useInvalidZip) {
+    const zip = new JSZip();
+    zip.file("README.txt", "This archive intentionally contains no Shapefile components.");
+    await writeFile(fixturePath, await zip.generateAsync({ type: "nodebuffer" }));
+    return;
+  }
   const properties = (index) => Object.fromEntries([
     ["name", `Feature ${String(index + 1).padStart(3, "0")}`],
     ["group", `Group ${index % 8}`],
@@ -181,11 +189,18 @@ const connectCdp = async (webSocketUrl) => {
 
 const waitFor = async (check, label, timeout = 15_000) => {
   const startedAt = Date.now();
+  let lastError;
   while (Date.now() - startedAt < timeout) {
-    if (await check()) return;
+    try {
+      if (await check()) return;
+    } catch (error) {
+      lastError = error;
+    }
     await delay(100);
   }
-  throw new Error(`${label} timed out.`);
+  throw new Error(
+    `${label} timed out.${lastError instanceof Error ? ` Last error: ${lastError.message}` : ""}`,
+  );
 };
 
 const dispatchMouse = (cdp, type, x, y, buttons, clickCount = 0) => cdp.send(
@@ -301,6 +316,7 @@ try {
     );
   }
 
+  verification: {
   const documentResult = await cdp.send("DOM.getDocument", { depth: 1 });
   const inputResult = await cdp.send("DOM.querySelector", {
     nodeId: documentResult.root.nodeId,
@@ -311,6 +327,96 @@ try {
     nodeId: inputResult.nodeId,
     files: [fixturePath],
   });
+  if (useInvalidZip) {
+    await waitFor(
+      () => cdp.evaluate("Boolean(document.querySelector('.react-invalid-zip-dialog[open]'))"),
+      "Invalid ZIP dialog render",
+    );
+    const invalidDialogState = await cdp.evaluate(`(() => {
+      const app = document.querySelector('.react-app');
+      const dialog = document.querySelector('.react-invalid-zip-dialog');
+      const rect = dialog.getBoundingClientRect();
+      return {
+        open: dialog.open,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        rootWidth: document.documentElement.scrollWidth,
+        appWidth: app.scrollWidth,
+        appClientWidth: app.clientWidth,
+        dialogWidth: rect.width,
+        dialogHeight: rect.height,
+        dialogScrollWidth: dialog.scrollWidth,
+        dialogClientWidth: dialog.clientWidth,
+        requiredFileCount: dialog.querySelectorAll('.react-invalid-zip-dialog__required span').length,
+        backgroundIsEmpty: document.querySelector('.react-grid')?.classList.contains('is-empty'),
+        statusDisplay: getComputedStyle(document.querySelector('.react-status')).display,
+      };
+    })()`);
+    assert.equal(invalidDialogState.open, true, "Invalid ZIP dialog did not open.");
+    assert.equal(invalidDialogState.rootWidth, invalidDialogState.innerWidth, "Root gained horizontal overflow.");
+    assert.equal(invalidDialogState.appWidth, invalidDialogState.appClientWidth, "Viewer gained horizontal overflow.");
+    assert.equal(
+      invalidDialogState.dialogScrollWidth,
+      invalidDialogState.dialogClientWidth,
+      "Invalid ZIP dialog gained horizontal overflow.",
+    );
+    assert.ok(invalidDialogState.dialogWidth < invalidDialogState.innerWidth, "Dialog exceeded popup width.");
+    assert.ok(invalidDialogState.dialogHeight < invalidDialogState.innerHeight, "Dialog exceeded popup height.");
+    assert.equal(invalidDialogState.requiredFileCount, 3, "Required Shapefile components are incomplete.");
+    assert.equal(invalidDialogState.backgroundIsEmpty, true, "Invalid ZIP changed the viewer result layout.");
+    assert.equal(invalidDialogState.statusDisplay, "none", "Invalid ZIP exposed the empty result section.");
+
+    await cdp.evaluate("document.querySelector('.react-invalid-zip-dialog footer button')?.click()");
+    await waitFor(
+      () => cdp.evaluate("!document.querySelector('.react-invalid-zip-dialog')"),
+      "Invalid ZIP dialog close",
+    );
+    await waitFor(
+      () => cdp.evaluate("document.activeElement === document.querySelector('input[type=\"file\"]')"),
+      "File picker focus restoration",
+    );
+    const closedState = await cdp.evaluate(`(() => ({
+      dropZoneVisible: getComputedStyle(document.querySelector('.react-drop-zone')).display !== 'none',
+      inputFocused: document.activeElement === document.querySelector('input[type="file"]'),
+    }))()`);
+    assert.equal(closedState.dropZoneVisible, true, "Drop zone did not return after closing the dialog.");
+    assert.equal(closedState.inputFocused, true, "Focus did not return to the file picker.");
+
+    const reopenedDocument = await cdp.send("DOM.getDocument", { depth: 1 });
+    const reopenedInput = await cdp.send("DOM.querySelector", {
+      nodeId: reopenedDocument.root.nodeId,
+      selector: 'input[type="file"]',
+    });
+    assert.ok(reopenedInput.nodeId, "Viewer file input was not restored.");
+    await cdp.send("DOM.setFileInputFiles", {
+      nodeId: reopenedInput.nodeId,
+      files: [fixturePath],
+    });
+    await waitFor(
+      () => cdp.evaluate("Boolean(document.querySelector('.react-invalid-zip-dialog[open]'))"),
+      "Invalid ZIP dialog reopen",
+    );
+    await cdp.evaluate(`(() => {
+      window.__gongmiriFileChooserClicks = 0;
+      document.querySelector('input[type="file"]')?.addEventListener('click', () => {
+        window.__gongmiriFileChooserClicks += 1;
+      }, { once: true });
+      document.querySelector('.react-invalid-zip-dialog footer .is-primary')?.click();
+    })()`);
+    await waitFor(
+      () => cdp.evaluate("!document.querySelector('.react-invalid-zip-dialog')"),
+      "Choose another ZIP action",
+    );
+    await delay(50);
+    assert.equal(
+      await cdp.evaluate("window.__gongmiriFileChooserClicks"),
+      1,
+      "Choose another ZIP did not invoke the file picker.",
+    );
+    console.log(JSON.stringify({ invalidDialogState, closedState }, null, 2));
+    console.log("Invalid ZIP popup regression check passed.");
+    break verification;
+  }
   await waitFor(
     () => cdp.evaluate("Boolean(document.querySelector('.react-table__grid'))"),
     "Attribute table render",
@@ -648,6 +754,7 @@ try {
     showAllClicked,
   }, null, 2));
   console.log("Popup table scroll regression check passed.");
+  }
 } finally {
   cdp?.webSocket?.close();
   if (chromeProcess && chromeProcess.exitCode === null) {

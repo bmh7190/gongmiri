@@ -16,6 +16,7 @@
     "test": "vitest run",
     "verify:extension": "node scripts/verify-extension.mjs",
     "verify:popup-scroll": "node scripts/verify-column-resize.mjs --popup && node scripts/verify-column-resize.mjs --popup --short-table",
+    "verify:invalid-zip-dialog": "node scripts/verify-column-resize.mjs --popup --invalid-zip",
     "fixture:browser": "node scripts/create-browser-fixture.mjs",
     "benchmark:parser": "node scripts/parse-benchmark.mjs",
     "benchmark:large": "node scripts/parse-benchmark.mjs --scenario=points-100k --quick",
