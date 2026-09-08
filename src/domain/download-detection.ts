@@ -1,4 +1,3 @@
-export const DOWNLOAD_DETECTION_ENABLED_KEY = "gongmiri.downloadDetectionEnabled";
 export const RECENT_ZIP_DOWNLOAD_KEY = "gongmiri.recentZipDownload";
 
 export type RecentZipDownload = {
