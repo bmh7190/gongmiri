@@ -1,5 +1,4 @@
 import {
-  DOWNLOAD_DETECTION_ENABLED_KEY,
   RECENT_ZIP_DOWNLOAD_KEY,
   fileNameFromPath,
   isZipDownloadCandidate,
@@ -13,9 +12,6 @@ chrome.runtime.onInstalled.addListener(() => {
 const handleDownloadChanged = async (delta: chrome.downloads.DownloadDelta) => {
   if (delta.state?.current !== "complete") return;
   try {
-    const stored = await chrome.storage.local.get(DOWNLOAD_DETECTION_ENABLED_KEY);
-    if (stored[DOWNLOAD_DETECTION_ENABLED_KEY] !== true) return;
-
     const [download] = await chrome.downloads.search({ id: delta.id });
     if (!download || !isZipDownloadCandidate(download.filename, download.finalUrl || download.url)) {
       return;
@@ -33,6 +29,30 @@ const handleDownloadChanged = async (delta: chrome.downloads.DownloadDelta) => {
   }
 };
 
-chrome.downloads?.onChanged.addListener((delta) => {
+const handleDownloadsChanged = (delta: chrome.downloads.DownloadDelta) => {
   void handleDownloadChanged(delta);
-});
+};
+
+let downloadListenerAttached = false;
+
+const syncDownloadListener = async () => {
+  const hasPermission = await chrome.permissions.contains({ permissions: ["downloads"] });
+  if (hasPermission && !downloadListenerAttached) {
+    chrome.downloads.onChanged.addListener(handleDownloadsChanged);
+    downloadListenerAttached = true;
+    return;
+  }
+  if (!hasPermission && downloadListenerAttached) {
+    chrome.downloads.onChanged.removeListener(handleDownloadsChanged);
+    downloadListenerAttached = false;
+    await chrome.action.setBadgeText({ text: "" });
+  }
+};
+
+const handlePermissionChange = (permissions: chrome.permissions.Permissions) => {
+  if (permissions.permissions?.includes("downloads")) void syncDownloadListener();
+};
+
+chrome.permissions.onAdded.addListener(handlePermissionChange);
+chrome.permissions.onRemoved.addListener(handlePermissionChange);
+void syncDownloadListener();
